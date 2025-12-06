@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../models/cart_item.dart';
+import 'package:intl/intl.dart'; // Add this package for number formatting
+
+class PaymentScreen extends StatefulWidget {
+  final List<CartItem> cartItems;
+  final double total;
+
+  const PaymentScreen(
+      {super.key, required this.cartItems, required this.total});
+
+  @override
+  _PaymentScreenState createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  final BlueThermalPrinter printer = BlueThermalPrinter.instance;
+  BluetoothDevice? selectedDevice;
+  bool isConnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedPrinter();
+  }
+
+  Future<void> _loadSavedPrinter() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final address = prefs.getString('printer_address');
+      if (address != null) {
+        final devices = await printer.getBondedDevices();
+        selectedDevice = devices.firstWhereOrNull((d) => d.address == address);
+
+        if (selectedDevice != null) {
+          final bool? alreadyConnected = await printer.isConnected;
+          if (alreadyConnected == true) {
+            setState(() => isConnected = true);
+            //_showMessage("Printer sudah terhubung.");
+          } else {
+            await _connectToPrinter();
+          }
+        } else {
+          await _clearSavedPrinter();
+          _showMessage("Printer tersimpan tidak ditemukan.");
+        }
+      } else {
+        _showMessage("Alamat printer belum disimpan.");
+      }
+    } catch (e) {
+      _showMessage("Error memuat printer: $e");
+    }
+  }
+
+  Future<void> _connectToPrinter() async {
+    if (selectedDevice != null) {
+      try {
+        final bool? alreadyConnected = await printer.isConnected;
+        if (alreadyConnected != true) {
+          await printer.connect(selectedDevice!);
+          setState(() => isConnected = true);
+          //_showMessage("Terhubung ke ${selectedDevice!.name}");
+        }
+      } catch (e) {
+        setState(() => isConnected = false);
+        _showMessage("Gagal terhubung ke printer: $e");
+      }
+    } else {
+      _showMessage("Tidak ada printer yang dipilih.");
+    }
+  }
+
+  Future<void> _clearSavedPrinter() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('printer_address');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _printReceipt() async {
+    if (isConnected) {
+      // Function to format numbers to Rupiah (accepts double now)
+      String formatRupiah(double amount) {
+        final formatter = NumberFormat.currency(
+            locale: 'id_ID', symbol: 'Rp.', decimalDigits: 0);
+        return formatter.format(amount);
+      }
+
+      printer.printNewLine();
+      printer.printCustom("Receipt", 2, 1);
+      printer.printCustom("POS System", 1, 1);
+      printer.printCustom("Date: ${DateTime.now()}", 0, 0);
+      printer.printNewLine();
+
+      printer.printCustom(
+          "Item         Qty    Price", 1, 0); // Adjust column spacing
+      for (var item in widget.cartItems) {
+        String itemName =
+            item.name.padRight(10, ' '); // Adjust spacing for item name
+        String itemQty =
+            item.quantity.toString().padLeft(4, ' '); // Align quantity right
+        String itemPrice = formatRupiah(item.price * item.quantity)
+            .padLeft(10, ' '); // Align price right
+
+        printer.printCustom("$itemName$itemQty$itemPrice", 0, 0);
+      }
+
+      printer.printNewLine();
+      printer.printCustom("Total: ${formatRupiah(widget.total)}", 2,
+          1); // Format total with Rupiah
+      printer.printNewLine();
+      printer.printCustom("Thank you!", 1, 1);
+      printer.printNewLine();
+      printer.printNewLine();
+      printer.printNewLine();
+      printer.printNewLine();
+      printer.paperCut();
+    } else {
+      _showMessage("Printer belum terhubung!");
+    }
+  }
+
+  void _processPayment() {
+    _printReceipt();
+    // _showMessage("Pembayaran berhasil! Bill telah dicetak.");
+    Navigator.popUntil(context, (route) => route.isFirst);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Payment")),
+      body: Center(
+        child: ElevatedButton(
+          onPressed: _processPayment,
+          child: const Text("Pay and Print Bill"),
+        ),
+      ),
+    );
+  }
+}
+
+extension FirstWhereOrNullExtension<E> on Iterable<E> {
+  E? firstWhereOrNull(bool Function(E element) test) {
+    for (var element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}

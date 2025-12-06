@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "678592226861",
+    "project_id": "multinotif-30689",
+    "storage_bucket": "multinotif-30689.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:678592226861:android:b2d7131ccd7baf41ed3aa4",
+        "android_client_info": {
+          "package_name": "com.example.mposv2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCabVyIvKuzyDTjoKQZo_FG_Meltkl0O6M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

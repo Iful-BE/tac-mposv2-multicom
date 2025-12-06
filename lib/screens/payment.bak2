@@ -1,0 +1,616 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import 'package:mposv2/screens/home_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:http/http.dart' as http;
+//import '../models/cart_item.dart';
+import 'package:intl/intl.dart'; // Add this package for number formatting
+
+class PaymentScreen extends StatefulWidget {
+  final String sessionId;
+  final String subBranch;
+  final int typePayment;
+  final double subtotal;
+  final double grandtotal;
+  final double discount;
+  final double tax;
+  final double total;
+  final String voucherCode;
+
+  const PaymentScreen({
+    Key? key,
+    required this.sessionId,
+    required this.subBranch,
+    required this.typePayment,
+    required this.subtotal,
+    required this.grandtotal,
+    required this.discount,
+    required this.tax,
+    required this.total,
+    required this.voucherCode,
+  }) : super(key: key);
+
+  @override
+  _PaymentScreenState createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  final BlueThermalPrinter printer = BlueThermalPrinter.instance;
+  BluetoothDevice? selectedDevice;
+  bool isConnected = false;
+  final TextEditingController cashController = TextEditingController();
+  final TextEditingController cardNumberController = TextEditingController();
+  final TextEditingController refNumberController = TextEditingController();
+  final TextEditingController descriptionController = TextEditingController();
+  late double totalAmount;
+  double change = 0;
+  String? selectedEDC;
+  String selectedPaymentMethod = "Debit";
+
+  @override
+  void initState() {
+    super.initState();
+    totalAmount = widget.grandtotal;
+    // Debug log to show typePayment
+    //s debugPrint("Type Payment: ${_getPaymentType(widget.typePayment)}");
+    _loadSavedPrinter();
+  }
+
+  String _getPaymentType(int typePayment) {
+    switch (typePayment) {
+      case 1:
+        return "1";
+      case 2:
+        return "2";
+      case 3:
+        return "3";
+      default:
+        return "Unknown";
+    }
+  }
+
+  Future<void> _loadSavedPrinter() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final address = prefs.getString('printer_address');
+      if (address != null) {
+        final devices = await printer.getBondedDevices();
+        selectedDevice = devices.firstWhereOrNull((d) => d.address == address);
+
+        if (selectedDevice != null) {
+          final bool? alreadyConnected = await printer.isConnected;
+          if (alreadyConnected == true) {
+            setState(() => isConnected = true);
+            //_showMessage("Printer sudah terhubung.");
+          } else {
+            await _connectToPrinter();
+          }
+        } else {
+          await _clearSavedPrinter();
+          _showMessage("Printer tersimpan tidak ditemukan.");
+        }
+      } else {
+        _showMessage("Alamat printer belum disimpan.");
+      }
+    } catch (e) {
+      _showMessage("Error memuat printer: $e");
+    }
+  }
+
+  Future<void> _connectToPrinter() async {
+    if (selectedDevice != null) {
+      try {
+        final bool? alreadyConnected = await printer.isConnected;
+        if (alreadyConnected != true) {
+          await printer.connect(selectedDevice!);
+          setState(() => isConnected = true);
+          //_showMessage("Terhubung ke ${selectedDevice!.name}");
+        }
+      } catch (e) {
+        setState(() => isConnected = false);
+        _showMessage("Gagal terhubung ke printer: $e");
+      }
+    } else {
+      _showMessage("Tidak ada printer yang dipilih.");
+    }
+  }
+
+  Future<void> _clearSavedPrinter() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('printer_address');
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  //Size
+  //0:normal
+  //1:normal-bold
+  //2:medium-bold
+  //3:large-bold
+  //Align
+  //0:left
+  //1:center
+  //2:right
+  Future<void> _printReceipt(Map<String, dynamic> data) async {
+    if (isConnected) {
+      String formatRupiah(double amount) {
+        final formatter = NumberFormat.currency(
+            locale: 'id_ID', symbol: 'Rp.', decimalDigits: 0);
+        return formatter.format(amount);
+      }
+
+      final header = data['data']['postHeader'];
+      final details = data['data']['postDetails'];
+      // Data pembayaran dari backend
+      DateTime dateTime = DateTime.parse(header['created_at']!).toLocal();
+      String formattedDateTime =
+          DateFormat('dd-MM-yyyy HH:mm:ss').format(dateTime);
+      // Mengambil ID dan memotong  tanpa 4 angka terakhir
+      String idPostHeader = header['id_post_header'].toString();
+      String idsession = idPostHeader.substring(0, idPostHeader.length - 4);
+      //mengambil data 4 angka terakhir
+      String idPostHeader2 = header['id_post_header'].toString();
+      String lastFourDigits =
+          idPostHeader2.split('').reversed.take(4).toList().reversed.join('');
+
+      printer.printCustom("", 1, 1);
+      printer.printCustom("Receipt", 1, 1);
+      printer.printCustom("POS System", 1, 1);
+      printer.printNewLine();
+      printer.printCustom("User    : ${header['user']}", 1, 0);
+      printer.printCustom("Tanggal : $formattedDateTime", 1, 0);
+      printer.printCustom(
+          "Id      : $idsession", 1, 0); // ID tanpa 4 angka terakhir
+      printer.printCustom(
+          "Struk   : $lastFourDigits", 1, 0); // 4 angka terakhir
+
+      printer.printCustom("Item        Qty    Harga", 1, 0);
+      for (var item in details) {
+        String itemName = item['name'].toString().toUpperCase();
+        String itemQty = item['quantity'].toString();
+        String itemPrice = formatRupiah(double.parse(item['price']));
+        String itemTotal =
+            formatRupiah(double.parse(item['price']) * item['quantity']);
+
+        printer.printCustom(itemName, 1, 0);
+        printer.printCustom("$itemQty x $itemPrice = $itemTotal", 1, 0);
+      }
+
+      printer.printNewLine();
+      //parsing data
+      String bank = (header['bank'] ?? "-").toString();
+      String noCard = (header['card'] ?? "-").toString();
+      String refNo = (header['ref_no'] ?? "-").toString();
+      String type = (header['type'] ?? "-").toString();
+      String ket = (header['description'] ?? "").toString();
+
+      // Parsing ke double agar aman dari error
+      double subTotal = double.parse(header['sub_total'].toString());
+      double tax = double.parse(header['tax'].toString());
+      double grandTotal = double.parse(header['grand_total'].toString());
+      double paid = double.parse(header['paid'].toString());
+      double discount = double.parse(header['discount'].toString());
+      double kembali = paid - grandTotal;
+
+      // Cetak subtotal, pajak, total, dibayar, dan kembalian dengan format rupiah
+      printer.printCustom("Subtotal : ${formatRupiah(subTotal)}", 1, 0);
+      printer.printCustom("Discount : ${formatRupiah(discount)}", 1, 0);
+      printer.printCustom("Pajak    : ${formatRupiah(tax)}", 1, 0);
+      printer.printCustom("Total    : ${formatRupiah(grandTotal)}", 1, 0);
+
+      // Cek apakah ada metode pembayaran selain CASH
+      if (header['type'].isEmpty) {
+        printer.printCustom("Payment   : CASH", 1, 0);
+      } else if (header['type'] == "Debit") {
+        printer.printCustom("Payment  : Non CASH", 1, 0);
+        printer.printCustom("Tipe     : $type", 1, 0);
+        printer.printCustom("Bank     : $bank", 1, 0);
+        printer.printCustom("Card     : $noCard", 1, 0);
+        printer.printCustom("Ref No   : $refNo", 1, 0);
+      } else {
+        printer.printCustom("Payment  : Non CASH", 1, 0);
+        printer.printCustom("Tipe     : $type", 1, 0);
+        printer.printCustom("Bank     : $bank", 1, 0);
+        printer.printCustom("Ref No   : $refNo", 1, 0);
+      }
+
+      printer.printCustom("Dibayar  : ${formatRupiah(paid)}", 1, 0);
+      printer.printCustom("Kembali  : ${formatRupiah(kembali)}", 1, 0);
+      printer.printNewLine();
+      printer.printCustom("Keterangan: $ket", 1, 0);
+      printer.printNewLine();
+      printer.printCustom("Terimakasih!\n\n", 1, 1);
+      printer.printCustom("", 1, 1);
+    } else {
+      _showMessage("Printer belum terhubung!");
+    }
+  }
+
+  void addCashAmount(int amount) {
+    double currentCash = double.tryParse(cashController.text) ?? 0;
+    double newCash = currentCash + amount;
+    cashController.text = newCash.toInt().toString();
+    calculateChange(cashController.text);
+  }
+
+  void calculateChange(String value) {
+    double cashPaid = double.tryParse(value) ?? 0;
+    setState(() {
+      change = cashPaid - totalAmount;
+    });
+  }
+
+  void setExactCash() {
+    // Mengonversi totalAmount menjadi integer untuk menghilangkan desimal
+    cashController.text = totalAmount.toInt().toString();
+    calculateChange(cashController.text);
+  }
+
+  void validateAndPay() {
+    if (widget.typePayment == 1) {
+      // Validasi pembayaran cash
+      double paid =
+          (double.tryParse(cashController.text) ?? 0).truncateToDouble();
+
+      // Check if the paid amount is valid
+      if (paid == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Jumlah pembayaran tidak boleh kosong atau 0"),
+          ),
+        );
+        return;
+      }
+
+      // Check if the paid amount is less than the total amount
+      if (paid < totalAmount) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text("Jumlah pembayaran kurang dari total yang harus dibayar"),
+          ),
+        );
+        return;
+      }
+    } else if (widget.typePayment == 2) {
+      if (selectedPaymentMethod == "Debit") {
+        if (selectedEDC == null ||
+            refNumberController.text.isEmpty ||
+            cardNumberController.text.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text("Pilih Bank ,Masukan Card &  nomor referensi")),
+          );
+          return;
+        }
+      } else {
+        if (selectedEDC == null || refNumberController.text.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text("Pilih Bank dan masukkan nomor referensi")),
+          );
+          return;
+        }
+      }
+      // Validasi pembayaran non-cash
+    }
+    // Jika valid, lanjutkan pembayaran dan cetak nota
+    _payAndPrintBill();
+  }
+
+  void _payAndPrintBill() {
+    /*
+    checkOut();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Pembayaran berhasil, mencetak nota...")),
+    );
+    */
+
+    // Menunggu beberapa saat untuk mencetak nota atau melakukan tugas lain
+    Future.delayed(const Duration(seconds: 1), () {
+      // Kembali ke HomeScreen dan menghapus semua route sebelumnya
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const HomeScreen()),
+        (route) => false, // Menghapus semua route sebelumnya
+      );
+    });
+  }
+
+  Future<String?> getDomainFromLocalStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('domain');
+  }
+
+  Future<String?> getBranchFromLocalStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('sub_branch_name');
+  }
+
+  Future<String?> getSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('session_id');
+  }
+
+  Future<String?> getUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('user_id');
+  }
+
+  Future<void> checkOut() async {
+    /*
+    var connectivityResult = await Connectivity().checkConnectivity();
+    // Cek apakah ada koneksi internet
+    if (connectivityResult == ConnectivityResult.none) {
+      print("Tidak ada koneksi internet. Cek jaringan dan coba lagi.");
+      return; // Hentikan eksekusi jika tidak ada koneksi
+    }
+    */
+
+    const String token = '6XCkiyLZUFFxomPkxyeliAedIrvMvFoNibXRlinY73710468';
+    final domain = await getDomainFromLocalStorage();
+    final userId = await getUser();
+    final sessionId = await getSession();
+    final subBranch = await getBranchFromLocalStorage();
+
+    if (domain == null) {
+      print('Domain or Sub-Branch not found');
+      return;
+    }
+
+    final url = Uri.parse('$domain/api/payment');
+    final paidAmount = cashController.text;
+    final type = '';
+
+    Map<String, dynamic> body = {};
+
+    if (widget.typePayment == 1) {
+      body = {
+        'user': userId ?? '',
+        'session_id': sessionId ?? '',
+        'sub_branch': subBranch ?? '',
+        'payment': '1',
+        'sub_total': widget.subtotal,
+        'discount': widget.discount,
+        'total': widget.total,
+        'tax': widget.tax,
+        'grand_total': widget.grandtotal,
+        'paid': paidAmount,
+        'type': type,
+        'description': descriptionController.text
+      };
+    } else if (widget.typePayment == 2) {
+      if (selectedPaymentMethod == "Debit") {
+        body = {
+          'session_id': sessionId ?? '',
+          'sub_branch': subBranch ?? '',
+          "payment": "2",
+          "sub_total": widget.subtotal,
+          "discount": widget.discount,
+          "total": widget.total,
+          "tax": widget.tax,
+          "grand_total": widget.grandtotal,
+          "paid": widget.grandtotal,
+          "user": userId ?? '',
+          "card": cardNumberController.text,
+          "bank": selectedEDC,
+          "ref_no": refNumberController.text,
+          "type": selectedPaymentMethod,
+          'description': descriptionController.text
+        };
+      } else if (selectedPaymentMethod == "QRIS") {
+        body = {
+          'session_id': sessionId ?? '',
+          'sub_branch': subBranch ?? '',
+          "payment": "2",
+          "sub_total": widget.subtotal,
+          "discount": widget.discount,
+          "total": widget.total,
+          "tax": widget.tax,
+          "grand_total": widget.grandtotal,
+          "paid": widget.grandtotal,
+          "user": userId ?? '',
+          "card": '',
+          "bank": selectedEDC,
+          "ref_no": refNumberController.text,
+          "type": selectedPaymentMethod,
+          'description': descriptionController.text
+        };
+      }
+    }
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(body),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _printReceipt(data);
+      } else {
+        print('Payment failed with status code: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error during payment: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final NumberFormat currencyFormatter =
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true, // Mencegah bottom overflow
+      appBar: AppBar(
+        title: const Text('Pembayaran'),
+      ),
+      body: SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior
+            .onDrag, // Tutup keyboard saat scroll
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Total: ${currencyFormatter.format(totalAmount)}",
+                style:
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+
+              // CASH PAYMENT
+              if (widget.typePayment == 1) ...[
+                TextField(
+                  controller: cashController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: "Jumlah Bayar"),
+                  onChanged: calculateChange,
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    ElevatedButton(
+                      onPressed: setExactCash,
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.orange,
+                      ),
+                      child: const Text("Uang Pas"),
+                    ),
+                    ...[10000, 20000, 50000, 100000].map((amount) {
+                      return ElevatedButton(
+                        onPressed: () => addCashAmount(amount),
+                        style: ElevatedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.orange,
+                        ),
+                        child: Text("${currencyFormatter.format(amount)}"),
+                      );
+                    }).toList(),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Kembali: ${currencyFormatter.format(change)}",
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: "Keterangan"),
+                ),
+              ]
+
+              // NON-CASH PAYMENT
+              else if (widget.typePayment == 2) ...[
+                Row(
+                  children: [
+                    Radio<String>(
+                      value: "Debit",
+                      groupValue: selectedPaymentMethod,
+                      activeColor: Colors.blue,
+                      onChanged: (String? value) {
+                        setState(() {
+                          selectedPaymentMethod = value!;
+                        });
+                      },
+                    ),
+                    const Text("Debit"),
+                    const SizedBox(width: 20),
+                    Radio<String>(
+                      value: "QRIS",
+                      groupValue: selectedPaymentMethod,
+                      activeColor: Colors.red,
+                      onChanged: (String? value) {
+                        setState(() {
+                          selectedPaymentMethod = value!;
+                          cardNumberController.clear();
+                        });
+                      },
+                    ),
+                    const Text("QRIS"),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text("Bank"),
+                DropdownButton<String>(
+                  value: selectedEDC,
+                  hint: const Text("--Pilih--"),
+                  isExpanded: true,
+                  items: ["BCA", "Mandiri"].map((String edc) {
+                    return DropdownMenuItem<String>(
+                      value: edc,
+                      child: Text(edc),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    setState(() {
+                      selectedEDC = newValue;
+                    });
+                  },
+                ),
+                if (selectedPaymentMethod != "QRIS")
+                  TextField(
+                    controller: cardNumberController,
+                    decoration: const InputDecoration(labelText: "Card"),
+                  ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: refNumberController,
+                  decoration:
+                      const InputDecoration(labelText: "Nomor Referensi"),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: "Keterangan"),
+                ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // BUTTON PAY & PRINT BILL
+              Center(
+                child: ElevatedButton(
+                  onPressed: validateAndPay,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 24),
+                    textStyle: const TextStyle(fontSize: 16),
+                  ),
+                  child: const Text("Simpan & Cetak",
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+extension FirstWhereOrNullExtension<E> on Iterable<E> {
+  E? firstWhereOrNull(bool Function(E element) test) {
+    for (var element in this) {
+      if (test(element)) return element;
+    }
+    return null;
+  }
+}
