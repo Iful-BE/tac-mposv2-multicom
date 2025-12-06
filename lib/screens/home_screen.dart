@@ -10,6 +10,7 @@ import 'package:mposv2/screens/CartItemScreen.dart';
 import 'package:mposv2/screens/order_online.dart';
 import 'package:mposv2/screens/payment_screen.dart';
 import 'package:mposv2/screens/redeem_catering.dart';
+import 'package:mposv2/screens/sold_screen.dart';
 import 'package:mposv2/screens/transaction_queue.dart';
 import 'package:mposv2/screens/transaction_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,6 +32,11 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
+class GlobalState {
+  static ValueNotifier<bool> isKasir = ValueNotifier<bool>(false);
+  static ValueNotifier<bool> isSplitMode = ValueNotifier(false);
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   String? userId;
   String? deviceId;
@@ -44,15 +50,24 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLoading = false;
   String? phoneError;
   String _latestVersion = "1.0.0"; // default
+  String? role;
 
   @override
   void initState() {
     super.initState();
     Wakelock.enable();
+    loadRole();
     _loadSavedPrinter();
     _loadUserData();
     _fetchRevenue();
     _loadLatestVersion();
+  }
+
+  void loadRole() async {
+    role = await getRole();
+    GlobalState.isKasir.value = (role == 'kasir');
+
+    setState(() {});
   }
 
   // Fungsi untuk mengambil data dari SharedPreferences
@@ -74,6 +89,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestVersion = version;
       });
     }
+  }
+
+  Future<String?> getRole() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('role');
   }
 
   Future<String?> getToken() async {
@@ -2721,7 +2741,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             _buildGridButton(
                               context,
-                              icon: Icons.tv,
+                              icon: Icons.screenshot_monitor,
                               label: "Order Online",
                               onPressed: () {
                                 Navigator.push(
@@ -2732,6 +2752,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               },
                             ),
+                            if (GlobalState.isKasir.value)
+                              _buildGridButton(
+                                context,
+                                icon: Icons.screenshot_monitor_sharp,
+                                label: "Product Sold",
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const SoldScreen()),
+                                  );
+                                },
+                              ),
                             _buildGridButton(
                               context,
                               icon: Icons.inventory,

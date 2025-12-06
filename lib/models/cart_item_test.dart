@@ -7,10 +7,11 @@ class CartItem {
   final String picture;
   final String princo;
   final String category;
-  final int is_variant;
-  final int is_sold;
+  int is_variant;
+  int is_sold;
   final String? variantName;
   final double? variantPrice;
+  bool selected;
 
   CartItem({
     required this.name,
@@ -25,6 +26,7 @@ class CartItem {
     this.is_sold = 0,
     this.variantName,
     this.variantPrice,
+    this.selected = false,
   });
 
   CartItem copyWith({

@@ -386,6 +386,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         final header = data['data']['postHeader'];
         final details = data['data']['postDetails'];
         final addr = data['data']['address'];
+        final splitPayments = data['data']['split_payments'];
+
         // Data pembayaran dari backend
         DateTime dateTime = DateTime.parse(header['created_at']!).toLocal();
         String formattedDateTime =
@@ -428,10 +430,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
         printer.printNewLine();
         //parsing data
-        String bank = (header['bank'] ?? "-").toString();
-        String noCard = (header['card'] ?? "-").toString();
-        String refNo = (header['ref_no'] ?? "-").toString();
-        String type = (header['type'] ?? "-").toString();
+
         String ket = (header['description'] ?? "").toString();
         // Parsing ke double agar aman dari error
         double subTotal = double.parse(header['sub_total'].toString());
@@ -449,24 +448,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
         printer.printCustom("PB1       : ${formatRupiah(tax)}", 1, 0);
         printer.printCustom("Rounded   : ${formatRupiah(rounding)}", 1, 0);
         printer.printCustom("Total     : ${formatRupiah(grandTotal)}", 1, 0);
-        // Cek apakah ada metode pembayaran selain CASH
-        if (header['type'].isEmpty) {
-          printer.printCustom("Payment   : CASH", 1, 0);
-        } else if (header['type'] == "Debit") {
-          printer.printCustom("Payment   : Non CASH", 1, 0);
-          printer.printCustom("Tipe      : $type", 1, 0);
-          printer.printCustom("Bank      : $bank", 1, 0);
-          printer.printCustom("Card      : $noCard", 1, 0);
-          printer.printCustom("Ref No    : $refNo", 1, 0);
+        // SPLIT PAYMENT
+        if (splitPayments != null &&
+            splitPayments is List &&
+            splitPayments.isNotEmpty) {
+          printer.printCustom("Split Payment", 1, 0);
+
+          for (var p in splitPayments) {
+            String method = (p['method'] ?? '-').toString().toUpperCase();
+            double amount = double.tryParse(p['amount'].toString()) ?? 0;
+
+            // DP FLAG (perbaikan disini)
+            bool isDP = (p['is_dp'] ?? 0) == 1;
+            if (isDP) method = "$method (DP)";
+            // Cetak metode
+            printer.printCustom("$method : ${formatRupiah(amount)}", 1, 0);
+          }
         } else {
-          printer.printCustom("Payment   : Non CASH", 1, 0);
-          printer.printCustom("Tipe      : $type", 1, 0);
-          printer.printCustom("Bank      : $bank", 1, 0);
-          printer.printCustom("Ref No    : $refNo", 1, 0);
+          if (header['type'].isEmpty) {
+            printer.printCustom("Payment   : CASH", 1, 0);
+            printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
+            printer.printCustom("Change    : ${formatRupiah(kembali)}", 1, 0);
+          } else {
+            printer.printCustom("Payment   : Non CASH", 1, 0);
+
+            if (header['type'].isNotEmpty) {
+              printer.printCustom("Tipe      : ${header['type']}", 1, 0);
+              printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
+            }
+          }
         }
 
-        printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
-        printer.printCustom("Change    : ${formatRupiah(kembali)}", 1, 0);
         printer.printNewLine();
         printer.printCustom("Keterangan: $ket", 1, 0);
         printer.printNewLine();
@@ -981,7 +993,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
         );
         return;
       }
-    } else if (widget.typePayment == 4) {
+    } else if (widget.typePayment == 4 && remaining > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            "Masih ada sisa pembayaran",
+          ),
+        ),
+      );
+      return;
+    } else if (widget.typePayment == 4 && splitType != "Cash") {
       if (selectedEDC == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Pilih Pembayaran")),
@@ -995,15 +1016,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         );
         return;
       }
-    } else if (widget.typePayment == 4 && remaining > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Masih ada sisa pembayaran",
-          ),
-        ),
-      );
-      return;
     }
 
     // Jika valid, lanjutkan pembayaran dan cetak nota
@@ -1211,10 +1223,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'cashier_id': cashierId ?? '',
           "card": cardNumberController
               .text, // Ensure you extract text from the controller
-          "bank": selectedEDC,
+          "bank": 'split',
           "ref_no": refNumberController
               .text, // Ensure you extract text from the controller
-          "type": selectedEDC,
+          "type": 'split',
           'nowa': waNumberController.text,
           'lokasi': selectedLocation,
           'totalGuest': guest,
@@ -2086,60 +2098,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            ElevatedButton(
-                              onPressed: () {
-                                splitAmountController.text =
-                                    totalAmount.toString();
-                                setState(() {});
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors
-                                    .pink.shade300, // Soft colorful button
-                                foregroundColor: Colors.white, // White text
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 10),
-                                elevation: 2,
-                              ),
-                              child: const Text("Uang Pas",
-                                  style: TextStyle(fontSize: 14)),
-                            ),
-                            ...[10000, 20000, 50000, 100000].map((amount) {
-                              return ElevatedButton(
-                                onPressed: () {
-                                  double oldVal = double.tryParse(
-                                          splitAmountController.text) ??
-                                      0;
-                                  splitAmountController.text =
-                                      (oldVal + amount).toString();
-                                  setState(() {});
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors
-                                      .orange.shade300, // Varied soft colors
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 10),
-                                  elevation: 2,
-                                ),
-                                child: Text(
-                                  currencyFormatter.format(amount),
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
                       ],
 
                       const SizedBox(height: 12),
@@ -2149,7 +2107,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       // =================================
                       ElevatedButton.icon(
                         onPressed: () {
-                          // VALIDASI: jika Non-Cash tetapi belum memilih EDC
                           if (splitType != "Cash" && selectedEDC == null) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -2171,7 +2128,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           double sum =
                               payments.fold(0, (p, c) => p + c["amount"]);
 
-                          if (sum + value > totalAmount) {
+                          // =============================
+                          // VALIDASI CASH BOLEH LEBIH
+                          // =============================
+                          if (splitType != "Cash" &&
+                              sum + value > totalAmount) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content:
@@ -2180,15 +2141,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             return;
                           }
 
+                          // Hitung kembalian jika cash lebih
+                          double change = 0;
+                          if (splitType == "Cash") {
+                            double totalAfterAdd = sum + value;
+                            if (totalAfterAdd > totalAmount) {
+                              change = totalAfterAdd - totalAmount;
+                            }
+                          }
+
                           payments.add({
                             "method":
                                 splitType == "Cash" ? "Cash" : selectedEDC,
                             "amount": value,
-                            "is_dp": isDownPayment, // DP ikut sesuai switch
+                            "is_dp": isDownPayment,
+                            "change": change, // Simpan kembalian jika ada
                           });
 
                           isDownPayment = false;
-
                           if (splitType == "Cash") hasCashPayment = true;
                           if (splitType != "Cash") hasNonCashPayment = true;
 
