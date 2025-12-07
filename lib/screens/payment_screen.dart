@@ -782,7 +782,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
         // printer.printCustom("Pajak    : ${formatRupiah(tax)}", 1, 0);
         printer.printCustom("Total      : ${formatRupiah(grandTotal)}", 1, 0);
-        printer.printCustom("Rounded   : ${formatRupiah(rounding)}", 1, 0);
+        // printer.printCustom("Rounded    : ${formatRupiah(rounding)}", 1, 0);
         printer.printCustom("Grand Total: 0", 1, 0);
         printer.printCustom("Payment    : Compliment", 1, 0);
         printer.printCustom("Compliment $cpl", 1, 0);
