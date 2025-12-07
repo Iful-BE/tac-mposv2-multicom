@@ -361,6 +361,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         final header = data['data']['postHeader'];
         final details = data['data']['postDetails'];
         final addr = data['data']['address'];
+        final splitPayments = data['data']['split_payments'];
+
         // Data pembayaran dari backend
         final currentTime = getFormattedDate();
         DateTime dateTime = DateTime.parse(header['created_at']!).toLocal();
@@ -406,43 +408,54 @@ class _TransactionScreenState extends State<TransactionScreen> {
 
         printer.printNewLine();
         //parsing data
-        String bank = (header['bank'] ?? "-").toString();
-        String noCard = (header['card'] ?? "-").toString();
-        String refNo = (header['ref_no'] ?? "-").toString();
-        String type = (header['type'] ?? "-").toString();
+
         String ket = (header['description'] ?? "").toString();
         // Parsing ke double agar aman dari error
         double subTotal = double.parse(header['sub_total'].toString());
-        //double tax = double.parse(header['tax'].toString());
-        double grandTotal = double.parse(header['grand_total'].toString());
-        // double paid = double.parse(header['paid'].toString());
-        double discount = double.parse(header['discount'].toString());
         double rounding = double.parse(header['rounding'].toString());
-        //double kembali = paid - grandTotal;
+        double tax = double.parse(header['tax'].toString());
+        double svc = double.parse(header['service_charge'].toString());
+        double grandTotal = double.parse(header['grand_total'].toString());
+        double paid = double.parse(header['paid'].toString());
+        double discount = double.parse(header['discount'].toString());
+        double kembali = paid - grandTotal;
         // Cetak subtotal, pajak, total, dibayar, dan kembalian dengan format rupiah
-        printer.printCustom("Subtotal : ${formatRupiah(subTotal)}", 1, 0);
-        printer.printCustom("Discount : ${formatRupiah(discount)}", 1, 0);
-        printer.printCustom("Rounding : ${formatRupiah(rounding)}", 1, 0);
-        // printer.printCustom("Pajak    : ${formatRupiah(tax)}", 1, 0);
-        printer.printCustom("Total    : ${formatRupiah(grandTotal)}", 1, 0);
-        // Cek apakah ada metode pembayaran selain CASH
-        if (header['type'].isEmpty) {
-          printer.printCustom("Payment  : CASH", 1, 0);
-        } else if (header['type'] == "Debit") {
-          printer.printCustom("Payment  : Non CASH", 1, 0);
-          printer.printCustom("Tipe     : $type", 1, 0);
-          printer.printCustom("Bank     : $bank", 1, 0);
-          printer.printCustom("Card     : $noCard", 1, 0);
-          printer.printCustom("Ref No   : $refNo", 1, 0);
-        } else {
-          printer.printCustom("Payment  : Non CASH", 1, 0);
-          printer.printCustom("Tipe     : $type", 1, 0);
-          printer.printCustom("Bank     : $bank", 1, 0);
-          printer.printCustom("Ref No   : $refNo", 1, 0);
-        }
+        printer.printCustom("Subtotal  : ${formatRupiah(subTotal)}", 1, 0);
+        printer.printCustom("Discount  : ${formatRupiah(discount)}", 1, 0);
+        printer.printCustom("Srv Charge: ${formatRupiah(svc)}", 1, 0);
+        printer.printCustom("PB1       : ${formatRupiah(tax)}", 1, 0);
+        printer.printCustom("Rounded   : ${formatRupiah(rounding)}", 1, 0);
+        printer.printCustom("Total     : ${formatRupiah(grandTotal)}", 1, 0);
+        // SPLIT PAYMENT
+        if (splitPayments != null &&
+            splitPayments is List &&
+            splitPayments.isNotEmpty) {
+          printer.printCustom("Split Payment", 1, 0);
 
-        //printer.printCustom("Dibayar  : ${formatRupiah(paid)}", 1, 0);
-        //printer.printCustom("Kembali  : ${formatRupiah(kembali)}", 1, 0);
+          for (var p in splitPayments) {
+            String method = (p['pay_method'] ?? '-').toString().toUpperCase();
+            double amount = double.tryParse(p['amount'].toString()) ?? 0;
+
+            // DP FLAG (perbaikan disini)
+            bool isDP = (p['is_down_payment'] ?? 0) == 1;
+            if (isDP) method = "$method (DP)";
+            // Cetak metode
+            printer.printCustom("$method : ${formatRupiah(amount)}", 1, 0);
+          }
+        } else {
+          if (header['type'].isEmpty) {
+            printer.printCustom("Payment   : CASH", 1, 0);
+            printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
+            printer.printCustom("Change    : ${formatRupiah(kembali)}", 1, 0);
+          } else {
+            printer.printCustom("Payment   : Non CASH", 1, 0);
+
+            if (header['type'].isNotEmpty) {
+              printer.printCustom("Tipe      : ${header['type']}", 1, 0);
+              printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
+            }
+          }
+        }
         printer.printNewLine();
         printer.printCustom("Keterangan: $ket", 1, 0);
         printer.printNewLine();
