@@ -2202,52 +2202,64 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ),
                             ],
                           ),
-                          child: ListTile(
-                            title: Row(
-                              children: [
-                                Text(
-                                  "${p['method']} - ${currencyFormatter.format(p['amount'])}",
-                                  style: TextStyle(
-                                    color: Colors.grey.shade800,
-                                    fontSize: 14,
-                                  ),
-                                ),
-
-                                // ===== Tambahkan label DP jika flag aktif =====
-                                if (isDP) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      "DP",
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ==========================================
+                              // AREA TEKS (dibungkus Expanded)
+                              // ==========================================
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    Text(
+                                      "${p['method']} - ${currencyFormatter.format(p['amount'])}",
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.orange.shade800,
-                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade800,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                  ),
-                                ]
-                              ],
-                            ),
-                            trailing: IconButton(
-                              icon: Icon(Icons.delete,
-                                  color: Colors.red.shade400),
-                              onPressed: () {
-                                if (p['method'] == "Cash")
-                                  hasCashPayment = false;
-                                if (p['method'] != "Cash")
-                                  hasNonCashPayment = false;
+                                    if (isDP)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.shade100,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          "DP",
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.orange.shade800,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
 
-                                payments.remove(p);
-                                setState(() {});
-                              },
-                            ),
+                              // ==========================================
+                              // DELETE BUTTON
+                              // ==========================================
+                              IconButton(
+                                icon: Icon(Icons.delete,
+                                    color: Colors.red.shade400),
+                                onPressed: () {
+                                  if (p['method'] == "Cash")
+                                    hasCashPayment = false;
+                                  if (p['method'] != "Cash")
+                                    hasNonCashPayment = false;
+
+                                  payments.remove(p);
+                                  setState(() {});
+                                },
+                              ),
+                            ],
                           ),
                         );
                       }),
