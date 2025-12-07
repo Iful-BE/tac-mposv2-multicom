@@ -778,7 +778,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         String ket = (header['description'] ?? "").toString();
         String cpl = (header['compliment'] ?? "").toString();
         double grandTotal = double.parse(header['grand_total'].toString());
-        double rounding = double.parse(header['rounding'].toString());
+        //double rounding = double.parse(header['rounding'].toString());
 
         // printer.printCustom("Pajak    : ${formatRupiah(tax)}", 1, 0);
         printer.printCustom("Total      : ${formatRupiah(grandTotal)}", 1, 0);
