@@ -42,6 +42,14 @@ class SoldScreenState extends State<SoldScreen> {
     return formatter.format(value);
   }
 
+  String initialsFromName(String name) {
+    final parts = name.trim().split(RegExp(r"\s+")); // pisah kata
+    final initials = parts.map((w) => w[0]).join(); // ambil huruf depan
+    return initials.length <= 3
+        ? initials.toUpperCase()
+        : initials.substring(0, 3).toUpperCase();
+  }
+
   //helper storage
 
   Future<String?> getToken() async {
@@ -404,7 +412,7 @@ class SoldScreenState extends State<SoldScreen> {
                                     ? Colors.green
                                     : Colors.orange,
                                 child: Text(
-                                  p.initial_product.toUpperCase(),
+                                  initialsFromName(p.name),
                                   style: const TextStyle(color: Colors.white),
                                 ),
                               ),
