@@ -72,10 +72,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
   String? selectedCompliment;
   List<String> locationList = [];
   List<String> edcList = [];
-  List<String> get kasirList =>
-      edcList.where((e) => e.toLowerCase().startsWith("kasir")).toList();
-  List<String> get bankList =>
-      edcList.where((e) => !e.toLowerCase().startsWith("kasir")).toList();
+  List<String> get kasirList => edcList;
+  List<String> get bankList => edcList;
+
+  // List<String> get kasirList =>
+  //     edcList.where((e) => e.toLowerCase().startsWith("kasir")).toList();
+  // List<String> get bankList =>
+  //     edcList.where((e) => !e.toLowerCase().startsWith("kasir")).toList();
   List<String> complimentList = [];
   String? selectedLocation;
 
