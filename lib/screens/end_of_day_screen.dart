@@ -200,11 +200,7 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
         try {
           final data = jsonDecode(response.body);
           if (data != null && data is Map<String, dynamic>) {
-            if (Platform.isWindows) {
-              _printReceiptWindows(data);
-            } else {
-              _printReceipt(data);
-            }
+            _printReceipt(data);
 
             //print(data);
           } else {
@@ -222,16 +218,19 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
   }
 
   Future<void> _printReceipt(Map<String, dynamic> data) async {
-    if (!(await printer.isConnected ?? false)) {
-      _showError("Printer tidak terhubung! Mencoba menghubungkan...");
-      await _connectToPrinter();
-      if (!(await printer.isConnected ?? false)) {
-        _showError("Gagal terhubung ke printer setelah percobaan ulang.");
+    bool? isConnected = await printer.isConnected;
+    if (isConnected != true) {
+      _showError("Printer tidak terhubung. Mencoba menghubungkan ulang...");
+      try {
+        await _connectToPrinter();
+        isConnected = await printer.isConnected;
+      } catch (e) {
+        _showError("Gagal menghubungkan ulang: $e");
         return;
       }
     }
 
-    try {
+    if (isConnected == true) {
       String formatRupiah(double amount) {
         final formatter = NumberFormat.currency(
             locale: 'id_ID', symbol: 'Rp.', decimalDigits: 0);
@@ -244,7 +243,6 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
       }
 
       Map<String, dynamic> receiptData = data['data'];
-      // String user = receiptData['header']['user'] ?? 'Unknown';
       String kasir = await getCashier() ?? 'Unknown';
       String sessionPos = receiptData['header']['session_pos'] ?? 'Unknown';
       final addr = receiptData['address'];
@@ -254,61 +252,65 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
 
       List<dynamic> items = receiptData['detail'];
       double subTotal =
-          double.tryParse(receiptData['subTotal']?.toString() ?? '0') ?? 0;
-      double totalCash =
-          double.tryParse(receiptData['totalCash']?.toString() ?? '0') ?? 0;
-      double totalDebit =
-          double.tryParse(receiptData['totalDebit']?.toString() ?? '0') ?? 0;
-      double totalCredit =
-          double.tryParse(receiptData['totalCredit']?.toString() ?? '0') ?? 0;
-      double totalother =
-          double.tryParse(receiptData['totalother']?.toString() ?? '0') ?? 0;
-      double totalTransfer =
-          double.tryParse(receiptData['totalTransfer']?.toString() ?? '0') ?? 0;
-      double totalQris =
-          double.tryParse(receiptData['totalQris']?.toString() ?? '0') ?? 0;
-      double totalVa =
-          double.tryParse(receiptData['totalVa']?.toString() ?? '0') ?? 0;
-      double totalQronline =
-          double.tryParse(receiptData['totalQronline']?.toString() ?? '0') ?? 0;
-
+          double.tryParse(receiptData['subTotal'].toString()) ?? 0;
       double totalDiscount =
-          double.tryParse(receiptData['totalDiscount']?.toString() ?? '0') ?? 0;
+          double.tryParse(receiptData['totalDiscount'].toString()) ?? 0;
       double totalRounding =
-          double.tryParse(receiptData['totalRounding']?.toString() ?? '0') ?? 0;
+          double.tryParse(receiptData['totalRounding'].toString()) ?? 0;
       double totalTax =
-          double.tryParse(receiptData['totalTax']?.toString() ?? '0') ?? 0;
+          double.tryParse(receiptData['totalTax'].toString()) ?? 0;
       double totalService =
-          double.tryParse(receiptData['totalService']?.toString() ?? '0') ?? 0;
+          double.tryParse(receiptData['totalService'].toString()) ?? 0;
+      double grandTotal =
+          double.tryParse(receiptData['grand_total'].toString()) ?? 0;
+      double totalPayment =
+          double.tryParse(receiptData['total_payment'].toString()) ?? 0;
 
-      printer.printCustom("", 1, 1);
+      Map<String, dynamic> combinedTotals =
+          Map<String, dynamic>.from(receiptData['combinedTotals'] ?? {});
+
+      Map<String, double> normalTotals = {};
+      Map<String, double> dpTotals = {};
+
       printer.printCustom("Close Session", 1, 1);
       printer.printCustom("${addr['bname']}", 1, 1);
       printer.printCustom("${addr['device_addr']}", 1, 1);
       printer.printCustom("${addr['descript']}", 1, 1);
       printer.printNewLine();
+
       printer.printCustom("Tanggal: $formattedDateTime", 1, 0);
       printer.printCustom("Kasir      : $kasir", 1, 0);
       printer.printCustom("Session POS: $sessionPos", 1, 0);
       printer.printNewLine();
-      printer.printCustom("Item        Qty    Harga", 1, 0);
 
+      printer.printCustom("Item        Qty    Harga", 1, 0);
       for (var item in items) {
         String itemName = item['name'].toString().toUpperCase();
-        String itemQty = item['total_quantity']?.toString() ?? '0';
-
-        double itemPriceValue =
-            double.tryParse(item['price']?.toString() ?? '0') ?? 0;
-        double itemTotalValue =
-            double.tryParse(item['total']?.toString() ?? '0') ?? 0;
-
-        String itemPrice = formatRupiah(itemPriceValue);
-        String itemTotal = formatRupiah(itemTotalValue);
+        String itemQty = item['total_quantity'].toString();
+        double itemPriceValue = double.tryParse(item['price'].toString()) ?? 0;
+        double itemTotalValue = double.tryParse(item['total'].toString()) ?? 0;
 
         printer.printCustom(itemName, 1, 0);
-        printer.printCustom("$itemPrice X $itemQty  = $itemTotal", 1, 0);
+        printer.printCustom(
+            "${formatRupiah(itemPriceValue)} x $itemQty = ${formatRupiah(itemTotalValue)}",
+            1,
+            0);
       }
+
       printer.printNewLine();
+
+      combinedTotals.forEach((type, obj) {
+        double amt = (obj is Map)
+            ? double.tryParse(obj['amount'].toString()) ?? 0
+            : double.tryParse(obj.toString()) ?? 0;
+
+        if (type.contains("(-DP)")) {
+          dpTotals[type] = amt;
+        } else {
+          normalTotals[type] = amt;
+        }
+      });
+
       printer.printCustom("Sub Total    : ${formatRupiah(subTotal)}", 1, 0);
       printer.printCustom(
           "Discount     : ${formatRupiah(totalDiscount)}", 1, 0);
@@ -317,39 +319,28 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
       printer.printCustom(
           "Rounded      : ${formatRupiah(totalRounding)}", 1, 0);
       printer.printNewLine();
-      printer.printCustom("Total Cash   : ${formatRupiah(totalCash)}", 1, 0);
-      printer.printCustom("Total Debit  : ${formatRupiah(totalDebit)}", 1, 0);
-      printer.printCustom("Total Credit : ${formatRupiah(totalCredit)}", 1, 0);
-      printer.printCustom("Total QRIS   : ${formatRupiah(totalQris)}", 1, 0);
+      printer.printCustom("Grand Total : ${formatRupiah(grandTotal)}", 1, 0);
+      printer.printNewLine();
+
+      normalTotals.forEach((type, amt) {
+        printer.printCustom("$type : ${formatRupiah(amt)}", 1, 0);
+      });
+
+      printer.printNewLine();
+
       printer.printCustom(
-          "Total Transfer: ${formatRupiah(totalTransfer)}", 1, 0);
-      printer.printCustom("Total Other  : ${formatRupiah(totalother)}", 1, 0);
-      double total = totalCash +
-          totalDebit +
-          totalQris +
-          totalCredit +
-          totalother +
-          totalTransfer;
+          "Total Payment : ${formatRupiah(totalPayment)}", 1, 0);
       printer.printNewLine();
-      printer.printCustom("Grand Total  : ${formatRupiah(total)}\n\n\n", 1, 0);
+
+      dpTotals.forEach((type, amt) {
+        printer.printCustom("$type : ${formatRupiah(amt)}", 1, 0);
+      });
+
       printer.printNewLine();
-      printer.printCustom("Online Sale", 1, 0);
-      printer.printCustom("Total VA     : ${formatRupiah(totalVa)}", 1, 0);
-      printer.printCustom(
-          "Total QR     : ${formatRupiah(totalQronline)}", 1, 0);
-      double totalVirtual = totalVa + totalQronline;
-      printer.printNewLine();
-      printer.printCustom(
-          "Total Online : ${formatRupiah(totalVirtual)}\n\n\n", 1, 0);
-      printer.printNewLine();
-      printer.printCustom("", 1, 0);
-      printer.printCustom("", 1, 0);
-      printer.printCustom("", 1, 1);
-      printer.printCustom("", 1, 1);
-      printer.printCustom("", 1, 1);
+
       sendRawCutCommand();
-    } catch (e) {
-      _showError("Terjadi kesalahan saat mencetak: $e");
+    } else {
+      _showError("Printer belum terhubung!");
     }
   }
 
