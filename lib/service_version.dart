@@ -36,16 +36,19 @@ class ServiceVersionResponse {
 class ServiceVersionRequest {
   final String subBranch;
   final String device;
+  final String subDevice;
 
   ServiceVersionRequest({
     required this.subBranch,
     required this.device,
+    required this.subDevice,
   });
 
   Map<String, dynamic> toJson() {
     return {
       "sub_branch": subBranch,
       "device": device,
+      "sub_device": subDevice,
     };
   }
 }

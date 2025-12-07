@@ -17,6 +17,7 @@ class _BranchFormScreenState extends State<BranchFormScreen> {
   final TextEditingController _branchController = TextEditingController();
   final TextEditingController _domainController = TextEditingController();
   final TextEditingController _deviceController = TextEditingController();
+  final TextEditingController _subdeviceController = TextEditingController();
   String? _selectedSubBranch;
   List<dynamic> _subBranches = [];
   bool _branchFound = false;
@@ -27,48 +28,61 @@ class _BranchFormScreenState extends State<BranchFormScreen> {
       _selectedSubBranch = null;
     });
 
-    final domain = _domainController.text;
-    final branchName = _branchController.text;
+    final domain = _domainController.text.trim();
+    final branchName = _branchController.text.trim();
+    final subDevice = _subdeviceController.text.trim();
+    final device = _deviceController.text.trim();
+
     if (branchName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a binis unit name')),
+        const SnackBar(content: Text('Please enter a bisnis unit name')),
       );
       return;
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('$domain/api/branches?name=$branchName'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      final url = Uri.parse(
+        '$domain/api/branches?name=$branchName&device=$device&sub_device=$subDevice',
       );
 
+      final response = await http.get(url);
+
+      final data = json.decode(response.body);
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] && data['data']['sub_branches'].isNotEmpty) {
-          setState(() {
-            _branchFound = true;
-            _subBranches = data['data']['sub_branches'];
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Bisnis unit belum terdaftar',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          );
+        if (data['success'] == true) {
+          final subs = data['data']['sub_branches'] ?? [];
+
+          if (subs.isNotEmpty) {
+            setState(() {
+              _branchFound = true;
+              _subBranches = subs;
+            });
+            return;
+          }
         }
+
+        // jika success false ATAU sub_branches kosong
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              data['message'] ?? 'Bisnis unit belum terdaftar',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to fetch bisnis unit data')),
+          const SnackBar(
+            content: Text('Failed to fetch bisnis unit data'),
+          ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('An error occurred. Please try again.')),
+        const SnackBar(
+          content: Text('An error occurred. Please try again.'),
+        ),
       );
     }
   }
@@ -78,6 +92,7 @@ class _BranchFormScreenState extends State<BranchFormScreen> {
     final domain = _domainController.text;
     final branchName = _branchController.text;
     final device = _deviceController.text;
+    final subDevice = _subdeviceController.text;
 
     if (domain.isEmpty || branchName.isEmpty || _selectedSubBranch == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -90,6 +105,7 @@ class _BranchFormScreenState extends State<BranchFormScreen> {
     await prefs.setString('branch_name', branchName);
     await prefs.setString('sub_branch_name', _selectedSubBranch!);
     await prefs.setString('device_id', device);
+    await prefs.setString('sub_device', subDevice);
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Configuration saved successfully')),
@@ -155,6 +171,22 @@ class _BranchFormScreenState extends State<BranchFormScreen> {
                     controller: _deviceController,
                     decoration: InputDecoration(
                       labelText: 'Enter ID Device',
+                      labelStyle:
+                          TextStyle(color: Theme.of(context).primaryColor),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide:
+                            BorderSide(color: Theme.of(context).primaryColor),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _subdeviceController,
+                    decoration: InputDecoration(
+                      labelText: 'Enter Sub Device',
                       labelStyle:
                           TextStyle(color: Theme.of(context).primaryColor),
                       border: OutlineInputBorder(

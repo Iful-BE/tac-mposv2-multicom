@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _userIdController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   Future<String>? _branchesFuture;
+  String _savedSubDevice = '';
 
   static const String noInternetMessage =
       "No internet connection. Please check your network.";
@@ -45,8 +46,15 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => isCheckingVersion = false);
       }
     });
-
+    _loadSubDevice();
     _branchesFuture = _getBranches();
+  }
+
+  void _loadSubDevice() async {
+    final result = await _getSubDevice();
+    setState(() {
+      _savedSubDevice = result.trim();
+    });
   }
 
   Future<String> _getBranches() async {
@@ -59,6 +67,11 @@ class _LoginScreenState extends State<LoginScreen> {
     return prefs.getString('device_id') ?? 'No Device available';
   }
 
+  Future<String> _getSubDevice() async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return prefs.getString('sub_device') ?? '';
+  }
+
   Future<void> checkAndUpdateBackend(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     final nextVersion = prefs.getString('next_version') ?? '';
@@ -66,6 +79,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (nextVersion.isNotEmpty && currentVersion != nextVersion) {
       final device = await _getDeviceId();
+      final subDevice = await _getSubDevice();
       final branches = prefs.getString('sub_branch_name') ?? '';
       final domains = prefs.getString('domain') ?? '';
 
@@ -75,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
           data: {
             "sub_branch": branches,
             "device": device,
+            "sub_device": subDevice,
             "version": nextVersion,
           },
         );
@@ -179,12 +194,14 @@ class _LoginScreenState extends State<LoginScreen> {
     final prefs = await SharedPreferences.getInstance();
     final branches = prefs.getString('sub_branch_name') ?? '';
     final device = await _getDeviceId();
+    final subDevice = await _getSubDevice();
 
     try {
       final serviceVersion = await fetchServiceVersion(
         ServiceVersionRequest(
           subBranch: branches,
           device: device,
+          subDevice: subDevice,
         ),
       );
 
@@ -460,6 +477,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            if (_savedSubDevice.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                "$_savedSubDevice",
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+
                             // User ID Field
                             TextField(
                               controller: _userIdController,
