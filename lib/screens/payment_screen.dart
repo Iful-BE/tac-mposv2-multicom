@@ -390,6 +390,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
         final details = data['data']['postDetails'];
         final addr = data['data']['address'];
         final splitPayments = data['data']['split_payments'];
+        if (details.isEmpty) return;
+
+        // ambil table_id pertama yang muncul
+        final dynamicTableId = details.first['table_id'];
+        final guestStr = header['total_guest']?.toString();
 
         // Data pembayaran dari backend
         DateTime dateTime = DateTime.parse(header['created_at']!).toLocal();
@@ -418,6 +423,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
         printer.printCustom(
             "Struk   : $lastFourDigits", 1, 0); // 4 angka terakhir
         printer.printCustom("Type    : ${header['order_type']}", 1, 0);
+        if (dynamicTableId != null &&
+            dynamicTableId.isNotEmpty &&
+            dynamicTableId != '0') {
+          printer.printCustom(
+            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            1,
+            0,
+          );
+        }
+
         printer.printNewLine();
         printer.printCustom("Item        Qty    Harga", 1, 0);
         for (var item in details) {
@@ -733,6 +748,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
         final header = data['data']['postHeader'];
         final details = data['data']['postDetails'];
         final addr = data['data']['address'];
+        final dynamicTableId = details.first['table_id'];
+        final guestStr = header['total_guest']?.toString();
         // Data pembayaran dari backend
         DateTime dateTime = DateTime.parse(header['created_at']!).toLocal();
         String formattedDateTime =
@@ -759,6 +776,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
             "Id      : $idsession", 1, 0); // ID tanpa 4 angka terakhir
         printer.printCustom(
             "Struk   : $lastFourDigits", 1, 0); // 4 angka terakhir
+        if (dynamicTableId != null &&
+            dynamicTableId.isNotEmpty &&
+            dynamicTableId != '0') {
+          printer.printCustom(
+            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            1,
+            0,
+          );
+        }
         printer.printNewLine();
         printer.printCustom("Item        Qty    Harga", 1, 0);
         for (var item in details) {
