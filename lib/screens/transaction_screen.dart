@@ -399,7 +399,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             dynamicTableId.isNotEmpty &&
             dynamicTableId != '0') {
           printer.printCustom(
-            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
             1,
             0,
           );
@@ -556,7 +556,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
             dynamicTableId.isNotEmpty &&
             dynamicTableId != '0') {
           printer.printCustom(
-            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
             1,
             0,
           );

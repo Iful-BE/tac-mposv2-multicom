@@ -427,7 +427,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             dynamicTableId.isNotEmpty &&
             dynamicTableId != '0') {
           printer.printCustom(
-            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
             1,
             0,
           );
@@ -780,7 +780,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             dynamicTableId.isNotEmpty &&
             dynamicTableId != '0') {
           printer.printCustom(
-            "Tabel : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
             1,
             0,
           );
