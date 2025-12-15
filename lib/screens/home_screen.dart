@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:mposv2/screens/end_of_day_screen.dart';
+import 'package:mposv2/screens/eod_summary.dart';
 import 'package:mposv2/screens/login_screen.dart';
 import 'package:mposv2/screens/member.dart';
 import 'package:mposv2/screens/CartItemScreen.dart';
@@ -14,8 +15,8 @@ import 'package:mposv2/screens/sold_screen.dart';
 import 'package:mposv2/screens/transaction_queue.dart';
 import 'package:mposv2/screens/transaction_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:mposv2/screens/printer_settings_screen.dart';
 import 'package:mposv2/screens/sales_screen.dart';
+import 'package:mposv2/screens/printer_settings_screen.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_custom_clippers/flutter_custom_clippers.dart';
@@ -2546,7 +2547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               },
                             ),
-                            if (GlobalState.isKasir.value)
+                            if (GlobalState.isKasir.value) ...[
                               _buildGridButton(
                                 context,
                                 icon: Icons.screenshot_monitor_sharp,
@@ -2559,6 +2560,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                   );
                                 },
                               ),
+                              _buildGridButton(
+                                context,
+                                icon: Icons.file_open,
+                                label: "Summary",
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                        builder: (_) => const EodSummary()),
+                                  );
+                                },
+                              ),
+                            ],
                             _buildGridButton(
                               context,
                               icon: Icons.inventory,
@@ -2569,20 +2582,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   MaterialPageRoute(
                                       builder: (context) =>
                                           TransactionScreen()),
-                                );
-                              },
-                            ),
-                            _buildGridButton(
-                              context,
-                              icon: Icons.file_open,
-                              label: "Summary",
-                              onPressed: () {
-                                // Tampilkan snackbar / dialog
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text("Coming Soon!"),
-                                    duration: Duration(seconds: 2),
-                                  ),
                                 );
                               },
                             ),
