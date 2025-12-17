@@ -388,22 +388,38 @@ class _TransactionScreenState extends State<TransactionScreen> {
         printer.printCustom("--Reprint on--", 1, 1);
         printer.printCustom(currentTime, 1, 1);
         printer.printNewLine();
-        printer.printCustom("Kasir    : ${header['kasir_name']}", 1, 0);
-        printer.printCustom("Tanggal  : $formattedDateTime", 1, 0);
+        printer.printCustom("Kasir   : ${header['kasir_name']}", 1, 0);
+        printer.printCustom("Tanggal : $formattedDateTime", 1, 0);
         printer.printCustom(
-            "Id       : $idsession", 1, 0); // ID tanpa 4 angka terakhir
+            "Id      : $idsession", 1, 0); // ID tanpa 4 angka terakhir
         printer.printCustom(
-            "Struk    : $lastFourDigits", 1, 0); // 4 angka terakhir
-        printer.printCustom("Type     : ${header['order_type']}", 1, 0);
-        if (dynamicTableId != null &&
-            dynamicTableId.isNotEmpty &&
-            dynamicTableId != '0') {
+            "Struk   : $lastFourDigits", 1, 0); // 4 angka terakhir
+        if (header['customer'] != null &&
+            header['customer'].toString().isNotEmpty) {
           printer.printCustom(
-            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Customer: ${header['customer']}",
             1,
             0,
           );
         }
+        if (header['nowa'] != null && header['nowa'].toString().isNotEmpty) {
+          printer.printCustom(
+            "Phone   : +62${header['nowa']}",
+            1,
+            0,
+          );
+        }
+        printer.printCustom("Type    : ${header['order_type']}", 1, 0);
+        if (dynamicTableId != null &&
+            dynamicTableId.isNotEmpty &&
+            dynamicTableId != '0') {
+          printer.printCustom(
+            "Table   : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            1,
+            0,
+          );
+        }
+
         printer.printNewLine();
         printer.printCustom("Item        Qty    Harga", 1, 0);
         for (var item in details) {
@@ -552,15 +568,32 @@ class _TransactionScreenState extends State<TransactionScreen> {
             "Id      : $idsession", 1, 0); // ID tanpa 4 angka terakhir
         printer.printCustom(
             "Struk   : $lastFourDigits", 1, 0); // 4 angka terakhir
-        if (dynamicTableId != null &&
-            dynamicTableId.isNotEmpty &&
-            dynamicTableId != '0') {
+        if (header['customer'] != null &&
+            header['customer'].toString().isNotEmpty) {
           printer.printCustom(
-            "Table : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            "Customer: ${header['customer']}",
             1,
             0,
           );
         }
+        if (header['nowa'] != null && header['nowa'].toString().isNotEmpty) {
+          printer.printCustom(
+            "Phone   : +62${header['nowa']}",
+            1,
+            0,
+          );
+        }
+        printer.printCustom("Type    : ${header['order_type']}", 1, 0);
+        if (dynamicTableId != null &&
+            dynamicTableId.isNotEmpty &&
+            dynamicTableId != '0') {
+          printer.printCustom(
+            "Table   : $dynamicTableId - ${guestStr ?? '-'} Pax",
+            1,
+            0,
+          );
+        }
+
         printer.printNewLine();
         printer.printCustom("Item        Qty    Harga", 1, 0);
         for (var item in details) {

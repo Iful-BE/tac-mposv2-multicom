@@ -327,7 +327,7 @@ class _TransactionScreenState extends State<TransactionQue> {
       printer.printCustom("Tgl  : ${trx['tanggal'] ?? '-'}", 1, 0);
       printer.printCustom("Kasir: ${trx['kasir'] ?? '-'}", 1, 0);
       printer.printCustom("Cust : ${trx['customer'] ?? '-'}", 1, 0);
-      printer.printCustom("Meja   : ${trx['table'] ?? '-'}", 1, 0);
+      printer.printCustom("Meja : ${trx['table'] ?? '-'}", 1, 0);
       printer.printCustom("Note : ${trx['note'] ?? '-'}", 1, 0);
       printer.printNewLine();
 
