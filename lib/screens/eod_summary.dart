@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
+import '../utils/printer_pref.dart';
+import '../utils/printer_helper.dart';
 
 /// ===============================
 /// MODEL SESSION
@@ -270,6 +272,7 @@ class _EodSummaryState extends State<EodSummary> {
   bool isConnected = false;
   bool isLoadingSession = false;
   bool isLoadingSummary = false;
+  bool is58mm = false;
 
   /// ===============================
   /// INIT
@@ -278,6 +281,14 @@ class _EodSummaryState extends State<EodSummary> {
   void initState() {
     super.initState();
     _loadSessionsFromApi();
+    _loadPaperSize();
+  }
+
+  Future<void> _loadPaperSize() async {
+    final size = await PrinterPref.getPaperSize();
+    setState(() {
+      is58mm = size == PaperSize.mm58;
+    });
   }
 
   /// ===============================
@@ -613,6 +624,7 @@ class _EodSummaryState extends State<EodSummary> {
     required List<Outstanding> outstanding,
     required List<Discount> discount,
     required List<PaymentSummary> payments,
+    required PaperSize paperSize,
   }) async {
     Navigator.pop(context); // tutup modal preview
 
@@ -634,6 +646,7 @@ class _EodSummaryState extends State<EodSummary> {
       outstanding: outstanding,
       discount: discount,
       payments: payments,
+      paperSize: paperSize,
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -661,48 +674,65 @@ class _EodSummaryState extends State<EodSummary> {
     required List<salestype> salesType,
     required List<Outstanding> outstanding,
     required List<Discount> discount,
+    PaperSize paperSize = PaperSize.mm58,
   }) async {
     bool? isConnected = await printer.isConnected;
     if (isConnected != true) {
       await _connectToPrinter();
     }
-
     final prefs = await SharedPreferences.getInstance();
-    final nameCashier = prefs.getString('cashier');
+    final nameCashier = prefs.getString('cashier') ?? "-";
     final currentTime = getFormattedDate();
 
-    printer.printCustom("SESSION SUMMARY", 2, 1);
+    final f = getFormat(paperSize);
+
+    printer.printCustom("SESSION SUMMARY", 1, 1);
     printer.printNewLine();
-    printer.printLeftRight(
-      "Location",
-      (summary.deviceName.isNotEmpty ? summary.deviceName.toUpperCase() : "-"),
+
+    printer.printCustom(
+      lr(
+        "Location",
+        summary.deviceName.isNotEmpty ? summary.deviceName.toUpperCase() : "-",
+        f,
+      ),
       1,
+      0,
     );
 
-    printer.printLeftRight("Cashier", "$nameCashier", 1);
-    printer.printLeftRight("Print On", "$currentTime", 1);
-    printer.printNewLine();
+    printer.printCustom(lr("Cashier", nameCashier, f), 1, 0);
+    printer.printCustom(lr("Print On", currentTime, f), 1, 0);
 
-    printer.printLeftRight("Session", session.sessionId, 1);
-    printer.printLeftRight("Total Sales", formatRupiah(summary.grandTotal), 1);
-    printer.printLeftRight("Guest", summary.guest.toString(), 1);
-    printer.printLeftRight("Invoice", summary.invoice.toString(), 1);
-    printer.printLeftRight("Guest Average", formatRupiah(summary.guestspd), 1);
-    printer.printLeftRight("Qty Average", formatRupiah(summary.qtyspd), 1);
-    printer.printNewLine();
+    printer.printCustom("-" * f.paper, 1, 0);
+
+    printer.printCustom(lr("Session", session.sessionId, f), 1, 0);
+    printer.printCustom(
+        lr("Total Sales", formatRupiah(summary.grandTotal), f), 1, 0);
+    printer.printCustom(lr("Guest", summary.guest.toString(), f), 1, 0);
+    printer.printCustom(lr("Invoice", summary.invoice.toString(), f), 1, 0);
+    printer.printCustom(
+        lr("Guest Average", formatRupiah(summary.guestspd), f), 1, 0);
+    printer.printCustom(
+        lr("Qty Average", formatRupiah(summary.qtyspd), f), 1, 0);
 
     // =========================
     // REVENUE
     // =========================
-    printer.printCustom("REVENUE", 1, 0);
-    printer.printLeftRight("Sub Total", formatRupiah(summary.subTotal), 1);
-    printer.printLeftRight("Discount", formatRupiah(summary.discount), 1);
-    printer.printLeftRight("Net Sales", formatRupiah(summary.total), 1);
-    printer.printLeftRight("Service", formatRupiah(summary.service), 1);
-    printer.printLeftRight("Tax", formatRupiah(summary.tax), 1);
-    printer.printLeftRight("Rounding", formatRupiah(summary.rounding), 1);
     printer.printNewLine();
-    printer.printLeftRight("Grand Total", formatRupiah(summary.grandTotal), 1);
+    printer.printCustom("REVENUE", 1, 0);
+
+    printer.printCustom(
+        lr("Sub Total", formatRupiah(summary.subTotal), f), 1, 0);
+    printer.printCustom(
+        lr("Discount", formatRupiah(summary.discount), f), 1, 0);
+    printer.printCustom(lr("Net Sales", formatRupiah(summary.total), f), 1, 0);
+    printer.printCustom(lr("Service", formatRupiah(summary.service), f), 1, 0);
+    printer.printCustom(lr("Tax", formatRupiah(summary.tax), f), 1, 0);
+    printer.printCustom(
+        lr("Rounding", formatRupiah(summary.rounding), f), 1, 0);
+
+    printer.printCustom("-" * f.paper, 1, 0);
+    printer.printCustom(
+        lr("GRAND TOTAL", formatRupiah(summary.grandTotal), f), 1, 0);
 
     // =========================
     // DETAIL ITEM
@@ -710,29 +740,46 @@ class _EodSummaryState extends State<EodSummary> {
     if (items.isNotEmpty) {
       printer.printNewLine();
       printer.printCustom("DETAIL ITEM", 1, 0);
+
       for (final i in items) {
-        printer.printLeftRight(
-          "${i.qty} x ${i.name.toUpperCase()}",
-          formatRupiah(i.total),
+        printer.printCustom(
+          lr(
+            "${i.qty} x ${i.name.toUpperCase()}",
+            formatRupiah(i.total),
+            f,
+          ),
           1,
+          0,
         );
       }
     }
+
+    printer.printCustom("-" * f.paper, 1, 0);
+    printer.printCustom(
+        lr("SUB TOTAL", formatRupiah(summary.subTotal), f), 1, 0);
 
     // =========================
     // VOID ITEM
     // =========================
     if (itemMinus.isNotEmpty) {
       printer.printNewLine();
-      printer.printCustom("VOID ITEM", 1, 0);
+      printer.printCustom("VOID ITEM", 1, 1);
+
       for (final m in itemMinus) {
-        printer.printLeftRight(
-          "${m.qty} x ${m.name.toUpperCase()}",
-          formatRupiah(m.total),
+        printer.printCustom(
+          lr(
+            "${m.qty} x ${m.name.toUpperCase()}",
+            formatRupiah(m.total),
+            f,
+          ),
+          1,
           0,
         );
       }
-      printer.printLeftRight("TOTAL VOID", formatRupiah(totalItemMinus), 1);
+
+      printer.printCustom("-" * f.paper, 1, 0);
+      printer.printCustom(
+          lr("TOTAL VOID", formatRupiah(totalItemMinus), f), 1, 0);
     }
 
     // =========================
@@ -741,81 +788,117 @@ class _EodSummaryState extends State<EodSummary> {
     if (payments.isNotEmpty) {
       printer.printNewLine();
       printer.printCustom("PAYMENT SUMMARY", 1, 0);
+
       for (final p in payments) {
-        printer.printLeftRight(
-          p.isDP ? "${p.type} (DP)" : p.type,
-          formatRupiah(p.amount),
+        printer.printCustom(
+          lr(
+            p.isDP ? "${p.type}" : p.type,
+            formatRupiah(p.amount),
+            f,
+          ),
           1,
+          0,
         );
       }
     }
 
     // =========================
-    // Compliment
+    // COMPLIMENT
     // =========================
     if (compliments.isNotEmpty) {
       printer.printNewLine();
-      printer.printCustom("COMPLIMENT", 1, 0);
+      printer.printCustom("COMPLIMENT", 1, 1);
+
       for (final c in compliments) {
-        printer.printLeftRight(
-          "${c.qty} x ${c.name.toUpperCase()}",
-          formatRupiah(c.total),
+        printer.printCustom(
+          lr(
+            "${c.qty} x ${c.name.toUpperCase()}",
+            formatRupiah(c.total),
+            f,
+          ),
           1,
+          0,
         );
       }
-      printer.printLeftRight(
-          "TOTAL COMPLIMENT", formatRupiah(totalCompliment), 1);
+
+      printer.printCustom("-" * f.paper, 1, 0);
+      printer.printCustom(
+          lr("TOTAL COMPLIMENT", formatRupiah(totalCompliment), f), 1, 0);
     }
 
     // =========================
-    // discount summary
+    // DISCOUNT
     // =========================
     if (discount.isNotEmpty) {
       printer.printNewLine();
       printer.printCustom("DISCOUNT", 1, 0);
+
       for (final d in discount) {
-        printer.printLeftRight(
-          "${d.qty} x ${d.voucher.toUpperCase()}",
-          formatRupiah(d.grandTotal),
+        printer.printCustom(
+          lr(
+            "${d.qty} x ${d.voucher.toUpperCase()}",
+            formatRupiah(d.grandTotal),
+            f,
+          ),
           1,
+          0,
         );
       }
-      printer.printLeftRight("TOTAL DISCOUNT", formatRupiah(totalDiscount), 1);
+
+      printer.printCustom("-" * f.paper, 1, 0);
+      printer.printCustom(
+          lr("TOTAL DISCOUNT", formatRupiah(totalDiscount), f), 1, 0);
     }
 
     // =========================
-    // Sales Type
+    // SALES TYPE
     // =========================
     if (salesType.isNotEmpty) {
       printer.printNewLine();
       printer.printCustom("SALES TYPE", 1, 0);
+
       for (final st in salesType) {
-        printer.printLeftRight(
-          "${st.qty} x ${st.name.toUpperCase()}",
-          formatRupiah(st.total),
+        printer.printCustom(
+          lr(
+            "${st.qty} x ${st.name.toUpperCase()}",
+            formatRupiah(st.total),
+            f,
+          ),
           1,
+          0,
         );
       }
-      printer.printLeftRight(
-          "TOTAL Sales Type", formatRupiah(totalSalesType), 1);
+
+      printer.printCustom("-" * f.paper, 1, 0);
+      printer.printCustom(
+          lr("TOTAL SALES TYPE", formatRupiah(totalSalesType), f), 1, 0);
     }
+
     // =========================
     // OUTSTANDING
     // =========================
     if (outstanding.isNotEmpty) {
       printer.printNewLine();
       printer.printCustom("OUTSTANDING", 1, 0);
+
       for (final o in outstanding) {
         final label = (o.table != null && o.table.toString().isNotEmpty)
             ? "${o.antrian} / ${o.table}"
             : o.antrian;
 
-        printer.printLeftRight(label, formatRupiah(o.grandTotal), 1);
+        printer.printCustom(
+          lr(label, formatRupiah(o.grandTotal), f),
+          1,
+          0,
+        );
       }
-      printer.printLeftRight(
-          "TOTAL OUTSTANDING", formatRupiah(totalOutstanding), 1);
+
+      printer.printCustom("-" * f.paper, 1, 0);
+      printer.printCustom(
+          lr("TOTAL OUTSTANDING", formatRupiah(totalOutstanding), f), 1, 0);
     }
 
+    printer.printNewLine();
     printer.printNewLine();
 
     sendRawCutCommand();
@@ -962,45 +1045,102 @@ class _EodSummaryState extends State<EodSummary> {
                 const SizedBox(height: 16),
 
                 /// 🔹 BUTTON (FIXED)
-                Row(
+                Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Tutup"),
-                      ),
+                    // =========================
+                    // PAPER SIZE TOGGLE
+                    // =========================
+                    StatefulBuilder(
+                      builder: (context, setLocalState) {
+                        bool localIs58mm = is58mm;
+
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Paper Size",
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            Row(
+                              children: [
+                                const Text("80mm"),
+                                Switch(
+                                  value: localIs58mm,
+                                  onChanged: (value) async {
+                                    // UI modal saja
+                                    setLocalState(() => localIs58mm = value);
+
+                                    // simpan preference
+                                    await PrinterPref.setPaperSize(
+                                      value ? PaperSize.mm58 : PaperSize.mm80,
+                                    );
+
+                                    // sinkron ke parent (tanpa rebuild modal)
+                                    if (mounted) {
+                                      setState(() => is58mm = value);
+                                    }
+                                  },
+                                ),
+                                const Text("58mm"),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        //onPressed: canPrint ? _printSummary : null,
-                        onPressed: () {
-                          _printSummary(
-                            summary: summary,
-                            session: session,
-                            items: items,
-                            itemMinus: itemMinus,
-                            totalItemMinus: totalItemMinus,
-                            totalVoid: totalVoid,
-                            totalCompliment: totalCompliment,
-                            totalDiscount: totalDiscount,
-                            totalOutstanding: totalOutstanding,
-                            totalSalesType: totalSalesType,
-                            voids: voids,
-                            compliments: compliments,
-                            salestype: salesType,
-                            outstanding: outstanding,
-                            discount: discount,
-                            payments: payments,
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).primaryColor,
-                          foregroundColor: Colors.white,
-                          // canPrint ? const Color(0xFF6C63FF) : Colors.grey,
+
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 12),
+
+                    // =========================
+                    // ACTION BUTTON
+                    // =========================
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("Tutup"),
+                          ),
                         ),
-                        child: const Text("Print"),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              // 🔥 AMBIL LANGSUNG DARI PREF (PALING AMAN)
+                              final paperSize =
+                                  await PrinterPref.getPaperSize();
+
+                              _printSummary(
+                                summary: summary,
+                                session: session,
+                                items: items,
+                                itemMinus: itemMinus,
+                                totalItemMinus: totalItemMinus,
+                                totalVoid: totalVoid,
+                                totalCompliment: totalCompliment,
+                                totalDiscount: totalDiscount,
+                                totalOutstanding: totalOutstanding,
+                                totalSalesType: totalSalesType,
+                                voids: voids,
+                                compliments: compliments,
+                                salestype: salesType,
+                                outstanding: outstanding,
+                                discount: discount,
+                                payments: payments,
+                                paperSize: paperSize,
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text("Print"),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
