@@ -41,6 +41,7 @@ class BackendSummary {
   final double grandTotal;
   final double guestspd;
   final double qtyspd;
+  final double invoicespd;
   final String deviceName;
 
   BackendSummary({
@@ -55,6 +56,7 @@ class BackendSummary {
     required this.grandTotal,
     required this.guestspd,
     required this.qtyspd,
+    required this.invoicespd,
     required this.deviceName,
   });
 
@@ -71,6 +73,8 @@ class BackendSummary {
       grandTotal: double.tryParse(json['grandTotal']?.toString() ?? '0') ?? 0,
       guestspd: double.tryParse(json['spending_guest']?.toString() ?? '0') ?? 0,
       qtyspd: double.tryParse(json['spending_qty']?.toString() ?? '0') ?? 0,
+      invoicespd:
+          double.tryParse(json['spending_invoice']?.toString() ?? '0') ?? 0,
       deviceName: json['device_name']?.toString() ?? '-',
     );
   }
@@ -710,6 +714,8 @@ class _EodSummaryState extends State<EodSummary> {
     printer.printCustom(lr("Guest", summary.guest.toString(), f), 1, 0);
     printer.printCustom(lr("Invoice", summary.invoice.toString(), f), 1, 0);
     printer.printCustom(
+        lr("Invoice Average", formatRupiah(summary.invoicespd), f), 1, 0);
+    printer.printCustom(
         lr("Guest Average", formatRupiah(summary.guestspd), f), 1, 0);
     printer.printCustom(
         lr("Qty Average", formatRupiah(summary.qtyspd), f), 1, 0);
@@ -1241,6 +1247,11 @@ class _EodSummaryState extends State<EodSummary> {
           _row(
             "Invoice",
             s.invoice.toString(),
+            bold: true,
+          ),
+          _row(
+            "Invoice Average",
+            rupiah(s.invoicespd),
             bold: true,
           ),
           _row(
