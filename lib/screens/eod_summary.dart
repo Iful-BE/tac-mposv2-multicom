@@ -931,7 +931,7 @@ class _EodSummaryState extends State<EodSummary> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Summary"),
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
         actions: [
           IconButton(

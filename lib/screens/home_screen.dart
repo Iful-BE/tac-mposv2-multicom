@@ -343,6 +343,46 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<bool> customerChange(String idTable, String custEdit) async {
+    final token = await getToken();
+
+    try {
+      final branch = await getBranchFromLocalStorage();
+      final domain = await getDomainFromLocalStorage();
+
+      if (branch == null || branch.isEmpty) {
+        throw Exception('Branch not found in local storage');
+      }
+      if (domain == null || domain.isEmpty) {
+        throw Exception('Domain not found in local storage');
+      }
+
+      final uri = Uri.parse('$domain/api/change-customer');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'idTable': idTable,
+          'customer': custEdit,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        print("Failed to change customer: ${response.statusCode}");
+        return false;
+      }
+    } catch (e) {
+      print("Error change customer: $e");
+      return false;
+    }
+  }
+
   Future<void> _loadSavedPrinter() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -713,6 +753,7 @@ class _HomeScreenState extends State<HomeScreen> {
           title: Text("Ubah Guest Count (Meja $tableNo)"),
           content: TextField(
             controller: countCtrl,
+            autofocus: true,
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               labelText: "Jumlah Tamu",
@@ -737,6 +778,49 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               child: const Text("Update"),
             )
+          ],
+        );
+      },
+    );
+  }
+
+  Future<String?> showCustomerEditDialog(
+    BuildContext context,
+    String tableNo,
+  ) async {
+    final TextEditingController controller = TextEditingController();
+
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Ubah Nama Customer (Meja $tableNo)"),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.text,
+            decoration: const InputDecoration(
+              labelText: "Nama Customer",
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              ),
+              onPressed: () {
+                final custEdit = controller.text.trim();
+                if (custEdit.isEmpty) return;
+                Navigator.pop(context, custEdit);
+              },
+              child: const Text('update'),
+            ),
           ],
         );
       },
@@ -2059,10 +2143,45 @@ class _HomeScreenState extends State<HomeScreen> {
                                               ),
                                             ),
                                           ),
+                                          // tombol ubah nama
+                                          Positioned(
+                                            top: 40,
+                                            right: 4,
+                                            child: GestureDetector(
+                                              onTap: () async {
+                                                final updatedCust =
+                                                    await showCustomerEditDialog(
+                                                  context,
+                                                  table['no'],
+                                                );
+
+                                                if (updatedCust != null) {
+                                                  await customerChange(
+                                                      table['no'].toString(),
+                                                      updatedCust);
+                                                  await refreshTables();
+                                                  setState(() {});
+                                                }
+                                              },
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.all(4),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.orange,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.badge_outlined,
+                                                  size: 20,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
 
                                           // --- Tombol Ubah Jumlah Tamu (di bawahnya) ---
                                           Positioned(
-                                            top: 40,
+                                            top: 80,
                                             right: 4,
                                             child: GestureDetector(
                                               onTap: () async {
@@ -2098,7 +2217,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           //gabung Meja
                                           // --- Tombol Change Table ---
                                           Positioned(
-                                            top: 80,
+                                            top: 120,
                                             right: 4,
                                             child: GestureDetector(
                                               onTap: () async {
