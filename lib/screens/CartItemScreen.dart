@@ -1418,7 +1418,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
     }
   }
 
-  Future<void> sendSplitToBackend({required int targetTable}) async {
+  Future<void> sendSplitToBackend({required String targetTable}) async {
     try {
       final token = await getToken();
       final domain = await getDomainFromLocalStorage();
@@ -1500,7 +1500,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
         for (var t in tables) {
           if (t['occupied'] == false) {
             allEmptyTables.add({
-              'no': int.tryParse(t['no'].toString()),
+              'no': t['no'].toString(),
               'area': areaName,
             });
           }
@@ -1508,7 +1508,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
       });
 
       String search = '';
-      int? selectedTarget;
+      String? selectedTarget;
 
       await showDialog(
         context: context,
@@ -1550,8 +1550,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final table = filtered[index];
-                            final tableNo =
-                                int.tryParse(table['no'].toString()) ?? 0;
+                            final tableNo = table['no'].toString() ?? '';
 
                             final selected = selectedTarget == tableNo;
 
