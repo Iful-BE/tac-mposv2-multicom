@@ -1050,7 +1050,7 @@ class _TransactionScreenState extends State<TransactionScreen> {
       case 'QRIS':
         return Colors.orange;
       default:
-        return Colors.grey;
+        return Colors.blue;
     }
   }
 
@@ -1249,6 +1249,22 @@ class _TransactionScreenState extends State<TransactionScreen> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
+                                          if ((transaction['customer'] ?? '')
+                                              .toString()
+                                              .isNotEmpty)
+                                            Text(
+                                              'Customer       : ${transaction['customer']}',
+                                              style: const TextStyle(
+                                                  color: Colors.white),
+                                            ),
+                                          if ((transaction['phone'] ?? '')
+                                              .toString()
+                                              .isNotEmpty)
+                                            Text(
+                                              'Phone            :+62${transaction['phone']}',
+                                              style: const TextStyle(
+                                                  color: Colors.white),
+                                            ),
                                           Text(
                                             'Payment Type: ${transaction['payment_type']}',
                                             style: const TextStyle(

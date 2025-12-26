@@ -1642,6 +1642,229 @@ class _CartItemScreenState extends State<CartItemScreen> {
     );
   }
 
+  void _showVoidModal(BuildContext context, Map item) {
+    final qtyController = TextEditingController();
+    final noteController = TextEditingController();
+    final userController = TextEditingController();
+    final passController = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return AlertDialog(
+          title: Text(
+            "Void ${item['name'].toUpperCase()}",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).primaryColor,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Qty Void
+              TextField(
+                controller: qtyController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(4),
+                ],
+                onChanged: (value) {
+                  final maxQty = item['quantity'];
+                  final qty = int.tryParse(value) ?? 0;
+
+                  if (qty > maxQty) {
+                    qtyController.text = maxQty.toString();
+                    qtyController.selection = TextSelection.fromPosition(
+                      TextPosition(offset: qtyController.text.length),
+                    );
+                  }
+                },
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  labelText: "Qty Void (Max ${item['quantity']})",
+                  labelStyle: const TextStyle(fontSize: 14),
+                  isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              // Keterangan
+              TextField(
+                controller: noteController,
+                style: const TextStyle(fontSize: 14),
+                decoration: const InputDecoration(
+                  labelText: "Keterangan Void",
+                  labelStyle: TextStyle(fontSize: 14),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // Header Otoritas
+              Text(
+                "OTORITAS",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.pink.shade700,
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              // User ID
+              TextField(
+                controller: userController,
+                style: const TextStyle(fontSize: 14),
+                decoration: const InputDecoration(
+                  labelText: "User ID",
+                  labelStyle: TextStyle(fontSize: 14),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              // Password
+              TextField(
+                controller: passController,
+                obscureText: true,
+                style: const TextStyle(fontSize: 14),
+                decoration: const InputDecoration(
+                  labelText: "Password",
+                  labelStyle: TextStyle(fontSize: 14),
+                  isDense: true,
+                  contentPadding:
+                      EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Batal"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              ),
+              child: const Text("Simpan"),
+              onPressed: () {
+                final int qtyVoid = int.tryParse(qtyController.text) ?? 0;
+
+                if (qtyVoid <= 0 ||
+                    qtyVoid > item['quantity'] ||
+                    noteController.text.isEmpty ||
+                    userController.text.isEmpty ||
+                    passController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Data tidak valid")),
+                  );
+                  return;
+                }
+
+                submitVoidItemqty(
+                  tempId: item['id'],
+                  productId: item['product_id'],
+                  antrianId: item['antrian_id'],
+                  qtyTemp: item['quantity'],
+                  qty: qtyVoid,
+                  note: noteController.text,
+                  userId: userController.text,
+                  password: passController.text,
+                );
+
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> submitVoidItemqty({
+    required int tempId,
+    required String productId,
+    required String antrianId,
+    required int qty,
+    required int qtyTemp,
+    required String note,
+    required String userId,
+    required String password,
+  }) async {
+    try {
+      _showLoadingDialog(context);
+      final token = await getToken();
+      final branch = await getBranchFromLocalStorage();
+      final domain = await getDomainFromLocalStorage();
+      final sessionId = await getSession();
+      final cashierId = await getUser();
+      final uri = Uri.parse('$domain/api/cart/void-item');
+      final response = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'sub_branch': branch,
+          'session_id': sessionId,
+          'temp_id': tempId,
+          'product_id': productId,
+          'antrian_id': antrianId,
+          'qty_temp': qtyTemp,
+          'qty_void': qty,
+          'note': note,
+          'cashier_id': cashierId,
+          'user_id': userId,
+          'password': password,
+        }),
+      );
+
+      Navigator.pop(context); // close loading
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['status'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Item berhasil di void")),
+        );
+        loadData();
+        // 🔄 Refresh cart / temp data
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['message'] ?? 'Gagal void item')),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     Timer? debounce;
@@ -2062,21 +2285,21 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                                     Icons.delete_outline,
                                                     color: Colors.redAccent,
                                                     size: 20),
-                                                onPressed: isLocked
-                                                    ? null
-                                                    : () {
-                                                        // Ambil variant JSON string
-                                                        final String
-                                                            variantJson =
-                                                            item['variant'] ??
-                                                                '{}';
-
-                                                        removeFromCart(
-                                                          item['product_id'],
-                                                          variant:
-                                                              variantJson, // kirim variant
-                                                        );
-                                                      },
+                                                onPressed: () {
+                                                  if (item['print_status'] ==
+                                                      1) {
+                                                    _showVoidModal(
+                                                        context, item);
+                                                  } else {
+                                                    // item belum print → hapus normal
+                                                    removeFromCart(
+                                                      item['product_id'],
+                                                      variant:
+                                                          item['variant'] ??
+                                                              '{}',
+                                                    );
+                                                  }
+                                                },
                                               ),
                                             ],
                                           );
