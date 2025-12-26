@@ -2795,29 +2795,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                               ),
 
                                               //  Hapus
-                                              IconButton(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                icon: const Icon(
-                                                    Icons.delete_outline,
-                                                    color: Colors.redAccent,
-                                                    size: 20),
-                                                onPressed: isLocked
-                                                    ? null
-                                                    : () {
-                                                        // Ambil variant JSON string
-                                                        final String
-                                                            variantJson =
-                                                            item['variant'] ??
-                                                                '{}';
-
-                                                        removeFromCart(
-                                                          item['product_id'],
-                                                          variant:
-                                                              variantJson, // kirim variant
-                                                        );
-                                                      },
-                                              ),
+                                              
                                             ],
                                           );
                                         },
