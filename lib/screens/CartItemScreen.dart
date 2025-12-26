@@ -2795,7 +2795,29 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                               ),
 
                                               //  Hapus
-                                              
+                                              IconButton(
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                icon: const Icon(
+                                                    Icons.delete_outline,
+                                                    color: Colors.redAccent,
+                                                    size: 20),
+                                                onPressed: () {
+                                                  if (item['print_status'] ==
+                                                      1) {
+                                                    _showVoidModal(
+                                                        context, item);
+                                                  } else {
+                                                    // item belum print → hapus normal
+                                                    removeFromCart(
+                                                      item['product_id'],
+                                                      variant:
+                                                          item['variant'] ??
+                                                              '{}',
+                                                    );
+                                                  }
+                                                },
+                                              ),
                                             ],
                                           );
                                         },
