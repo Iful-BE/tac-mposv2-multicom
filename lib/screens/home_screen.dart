@@ -52,23 +52,37 @@ class _HomeScreenState extends State<HomeScreen> {
   String? phoneError;
   String _latestVersion = "1.0.0"; // default
   String? role;
+  final TextEditingController phoneController = TextEditingController();
+  bool isRegisterMember = false;
+
+  bool _isPhoneValid() {
+    return phoneController.text.length >= 9;
+  }
 
   @override
   void initState() {
     super.initState();
     Wakelock.enable();
+    _loadDataFromLocal();
     loadRole();
     _loadSavedPrinter();
     _loadUserData();
-    _fetchRevenue();
     _loadLatestVersion();
   }
 
   void loadRole() async {
     role = await getRole();
-    GlobalState.isKasir.value = (role == 'kasir');
+    bool isKasir = (role == 'kasir');
+    GlobalState.isKasir.value = isKasir;
 
-    setState(() {});
+    // Hanya fetch revenue jika role adalah kasir
+    if (isKasir) {
+      _fetchRevenue();
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   // Fungsi untuk mengambil data dari SharedPreferences
@@ -90,6 +104,55 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestVersion = version;
       });
     }
+  }
+
+  Future<void> _loadDataFromLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Ambil data dari local
+    String? savedPhone = prefs.getString('user_phone'); // Format: 62812...
+    bool? savedMemberStatus = prefs.getBool('is_register_member');
+
+    if (savedPhone != null && savedPhone.startsWith('62')) {
+      // Kembalikan ke format input (tanpa 62) untuk ditampilkan di TextField
+      String displayPhone = savedPhone.substring(2);
+
+      setState(() {
+        phoneController.text = displayPhone;
+        // Hanya set true jika status di local true DAN nomor tidak kosong
+        isRegisterMember =
+            (savedMemberStatus ?? false) && displayPhone.isNotEmpty;
+      });
+    }
+  }
+
+  Future<void> clearCustomerData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user_phone');
+    await prefs.remove('is_register_member');
+    phoneController.clear();
+    setState(() {
+      isRegisterMember = false;
+    });
+  }
+
+  // Tambahkan parameter String value
+  Future<void> _saveCustomerDataToLocal(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Gunakan parameter 'value' bukan phoneController.text
+    if (value.isEmpty) {
+      await prefs.remove('user_phone');
+      await prefs.setBool('is_register_member', false);
+      return;
+    }
+
+    String input = value;
+    if (input.startsWith('0')) input = input.substring(1);
+    String formattedPhone = "62$input";
+
+    await prefs.setString('user_phone', formattedPhone);
+    await prefs.setBool('is_register_member', isRegisterMember);
   }
 
   Future<String?> getRole() async {
@@ -731,6 +794,10 @@ class _HomeScreenState extends State<HomeScreen> {
             'total_point': (data['data']['total_point'] == 10)
                 ? 0
                 : (data['data']['total_point'] ?? 0),
+            // Tangkap data tambahan
+            'last_redeem': data['last_redeem_date'] ?? '-',
+            'redeem_loc': data['last_redeem_loc'] ?? '-',
+            'rewards_count': data['rewards_count'] ?? 0,
           };
         }
       }
@@ -833,8 +900,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String? guestError;
     String? phoneError;
-    String orderType = "DINE IN";
-    final modeCrm = await getCrm() ?? true;
+    final modeBool = await getMode() ?? false;
+
+    String orderType =
+        modeBool ? "DINE IN" : "RETAIL"; // default: false = retail
 
     return await showDialog<Map<String, String>>(
       context: context,
@@ -846,85 +915,137 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // 🔹 Tombol Order Type , "CATERING"
-                SizedBox(
-                  width: double.infinity,
-                  child: Row(
-                    children: [
-                      for (final type in ["DINE IN", "TAKE AWAY", "CATERING"])
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                orderType = type;
-                                phoneError =
-                                    null; // reset error kalau ganti tipe
-                              });
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: orderType == type
-                                    ? Theme.of(context).primaryColor
-                                    : Colors.grey[800],
-                                borderRadius: BorderRadius.horizontal(
-                                  left: type == "DINE IN"
-                                      ? const Radius.circular(4)
-                                      : Radius.zero,
-                                  right: type == "CATERING"
-                                      ? const Radius.circular(4)
-                                      : Radius.zero,
+                if (modeBool) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: Row(
+                      children: [
+                        for (final type in ["DINE IN", "TAKE AWAY", "CATERING"])
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  orderType = type;
+                                  phoneError =
+                                      null; // reset error kalau ganti tipe
+                                });
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: orderType == type
+                                      ? Theme.of(context).primaryColor
+                                      : Colors.grey[800],
+                                  borderRadius: BorderRadius.horizontal(
+                                    left: type == "DINE IN"
+                                        ? const Radius.circular(4)
+                                        : Radius.zero,
+                                    right: type == "CATERING"
+                                        ? const Radius.circular(4)
+                                        : Radius.zero,
+                                  ),
                                 ),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              alignment: Alignment.center,
-                              child: Text(
-                                type,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 10),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  type,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: guestController,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
                     ],
+                    decoration: InputDecoration(
+                      labelText: "Jumlah Tamu",
+                      errorText: guestError,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: guestController,
-                  keyboardType: TextInputType.number,
-                  autofocus: true,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                  ],
-                  decoration: InputDecoration(
-                    labelText: "Jumlah Tamu",
-                    errorText: guestError,
-                  ),
-                ),
-                const SizedBox(height: 10),
-
+                  const SizedBox(height: 10),
+                ],
                 // 🔹 Nomor WhatsApp (Wajib hanya jika Catering)
                 TextField(
                   controller: phoneController,
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(13),
                   ],
                   decoration: InputDecoration(
-                    labelText: orderType == "CATERING"
-                        ? "No Whatsapp (Wajib)"
-                        : "No Whatsapp (Opsional)",
-                    prefix: const Text(
-                      "+62 ",
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    errorText: phoneError,
+                    // Hapus 'const' di sini
+                    labelText: "No Whatsapp",
+                    errorText:
+                        phoneError, // Variabel ini penyebab error jika ada const di atas
+                    prefixText: "+62 ",
+                    border:
+                        const OutlineInputBorder(), // Anda bisa taruh 'const' di sini saja
                   ),
+                  // Kita tetap panggil simpan ke local saat mengetik
+                  onChanged: (value) {
+                    setState(() {
+                      if (value.isEmpty) {
+                        isRegisterMember = false;
+                      }
+                    });
+                    // Kirim value ke fungsi simpan
+                    _saveCustomerDataToLocal(value);
+                  },
+                ),
+                const SizedBox(height: 10),
+
+                // --- BAGIAN PENYELESAI MASALAH ---
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: phoneController,
+                  builder: (context, value, child) {
+                    // Logika validasi: minimal 9 digit
+                    bool isValid = value.text.length >= 9;
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: isValid
+                            ? Colors.green.withOpacity(0.05)
+                            : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SwitchListTile(
+                        title: Text(
+                          "Daftarkan sebagai Member,input nomor dan aktifkan.",
+                          style: TextStyle(
+                            fontSize:
+                                12, // Ukuran teks diperkecil (standar biasanya 16)
+                            fontWeight: FontWeight
+                                .w500, // Tidak terlalu tebal, tidak terlalu tipis
+                            color: isValid ? Colors.black87 : Colors.grey,
+                          ),
+                        ),
+                        // Switch hanya bisa menyala jika isValid TRUE
+                        value: isValid ? isRegisterMember : false,
+                        activeColor: Colors.green,
+                        onChanged: isValid
+                            ? (bool newValue) {
+                                setState(() {
+                                  isRegisterMember = newValue;
+                                });
+                                // Simpan status member terbaru dengan teks yang ada di controller
+                                _saveCustomerDataToLocal(phoneController.text);
+                              }
+                            : null, // Otomatis disable jika nomor kurang dari 9 digit
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -942,7 +1063,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   final guest = guestController.text.trim();
                   final phone = phoneController.text.trim();
                   bool hasError = false;
-                  if (guest.isEmpty) {
+
+                  if (guest.isEmpty && modeBool) {
                     guestError = "Jumlah tamu tidak boleh kosong";
                     hasError = true;
                   } else {
@@ -1046,6 +1168,9 @@ class _HomeScreenState extends State<HomeScreen> {
               name: name,
               trx: result['trx'],
               point: result['total_point'],
+              lastRedeem: result['last_redeem'],
+              redeemLoc: result['redeem_loc'],
+              rewardsCount: result['rewards_count'],
             ),
           ),
         );
@@ -1063,26 +1188,65 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     } else {
-      // === RETAIL ===
-      await prefs.setString('customer_name', 'UMUM');
-      await prefs.setString('total_guest', '1');
-      await prefs.setString('orderType', 'RETAIL');
+      final resultModal = await showGuestPhoneModal(context);
+      if (resultModal == null) return;
+      final phone = resultModal['phone'] ?? '';
+      await prefs.setString('user_phone', phone);
+      final result = await checkIsMember(phone);
+      if (!mounted) return;
 
-      final sessionId = await getDevice() ?? "";
-      final subBranch = await getBranchFromLocalStorage() ?? "";
+      if (result['status'] == true) {
+        final name = result['name'] ?? '';
+        await prefs.setString('customer_name', name);
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CartItemScreen(
-            sessionId: sessionId,
-            subBranch: subBranch,
-            antrianId: null,
-            isSelfService: false,
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MemberScreen(
+              name: name,
+              trx: result['trx'],
+              point: result['total_point'],
+              lastRedeem: result['last_redeem'], // Data dari API
+              redeemLoc: result['redeem_loc'], // Data dari API
+              rewardsCount: result['rewards_count'],
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        final inputName = await showNameModal(context);
+        if (!mounted) return;
+
+        await prefs.setString('customer_name', inputName ?? '');
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const SalesScreen(isSelfService: true),
+          ),
+        );
+      }
     }
+    //else {
+    //   // === RETAIL ===
+    //   await prefs.setString('customer_name', 'UMUM');
+    //   await prefs.setString('total_guest', '1');
+    //   await prefs.setString('orderType', 'RETAIL');
+
+    //   final sessionId = await getDevice() ?? "";
+    //   final subBranch = await getBranchFromLocalStorage() ?? "";
+
+    //   Navigator.pushReplacement(
+    //     context,
+    //     MaterialPageRoute(
+    //       builder: (_) => CartItemScreen(
+    //         sessionId: sessionId,
+    //         subBranch: subBranch,
+    //         antrianId: null,
+    //         isSelfService: false,
+    //       ),
+    //     ),
+    //   );
+    // }
   }
 
   Future<String?> showNameModal(BuildContext context) async {
@@ -2331,11 +2495,168 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  TableRow _buildTableRow(IconData icon, String label, String? value) {
+    return TableRow(
+      children: [
+        Icon(icon, size: 20, color: Colors.white),
+        Padding(
+          padding: const EdgeInsets.only(left: 8.0, top: 4, bottom: 4),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 4.0),
+          child: Text(
+            ": ${value ?? "-"}",
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCard(dynamic totalCash, dynamic totalNonCash) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 6,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            // Bagian Cash
+            Expanded(
+              child: _buildSummaryItem(
+                icon: Icons.payments,
+                label: "Total Cash",
+                value: totalCash.toString(),
+                color: Colors.green,
+              ),
+            ),
+
+            // Garis Pemisah Tengah
+            VerticalDivider(
+              color: Colors.grey.shade300,
+              thickness: 1,
+              width: 1,
+              indent: 12,
+              endIndent: 12,
+            ),
+
+            // Bagian Non-Cash
+            Expanded(
+              child: _buildSummaryItem(
+                icon: Icons.account_balance_wallet,
+                label: "Total Non Cash",
+                value: totalNonCash.toString(),
+                color: Colors.orange,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+// Sub-widget untuk item di dalam card
+  Widget _buildSummaryItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            // Agar teks angka tidak pecah jika sangat panjang
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      // Menggunakan InkWell agar ada efek klik yang rapi
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1), // Warna latar lembut
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(icon, size: 28, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     int crossAxisCount;
-
     if (screenWidth >= 1200) {
       crossAxisCount = 10; // Desktop
     } else if (screenWidth >= 600) {
@@ -2346,15 +2667,61 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
         resizeToAvoidBottomInset: false,
         appBar: AppBar(
-          backgroundColor: Theme.of(context).primaryColor,
-          title: const Text(
-            "MultiPOS",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+          // Menghilangkan bayangan agar menyatu dengan Wave di bawahnya
+          elevation: 0,
+          // Menggunakan flexibleSpace untuk menerapkan Gradient
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Theme.of(context).primaryColor,
+                  // Transisi lembut ke warna yang lebih terang (Soft)
+                  Color.alphaBlend(Colors.white.withOpacity(0.2),
+                      Theme.of(context).primaryColor),
+                ],
+              ),
             ),
           ),
+          title: const Text(
+            "MULTIPOS",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2, // Membuat teks lebih modern
+            ),
+          ),
+          actions: [
+            // Ikon Notifikasi di sebelah kanan
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications_none_rounded,
+                      color: Colors.white, size: 28),
+                  onPressed: () {
+                    // Logika ketika notifikasi diklik
+                  },
+                ),
+                // Badge Merah jika ada notifikasi baru (Opsional)
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    constraints:
+                        const BoxConstraints(minWidth: 12, minHeight: 12),
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(width: 8), // Memberi sedikit jarak di ujung kanan
+          ],
         ),
         body: Stack(
           children: [
@@ -2364,10 +2731,21 @@ class _HomeScreenState extends State<HomeScreen> {
               clipper: WaveClipperOne(),
               child: Container(
                 height: 160,
-                color: Theme.of(context).primaryColor,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    // Tips Modern: Gunakan warna yang berdekatan di roda warna
+                    colors: [
+                      Theme.of(context).primaryColor, // Warna primary utama
+                      Theme.of(context)
+                          .primaryColor
+                          .withOpacity(0.8), // Transisi ke warna lebih lembut
+                    ],
+                  ),
+                ),
               ),
             ),
-
             // Wave BAWAH
             Align(
               alignment: Alignment.bottomCenter,
@@ -2379,10 +2757,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     clipper: WaveClipperOne(reverse: true),
                     child: Container(
                       height: 100,
-                      color: Theme.of(context).primaryColor,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment
+                              .bottomRight, // Gradient dimulai dari sudut bawah
+                          end: Alignment.topLeft,
+                          colors: [
+                            Theme.of(context)
+                                .primaryColor, // Warna primary utama
+                            Theme.of(context).primaryColor.withOpacity(
+                                0.8), // Transisi ke warna lebih lembut
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-
                   // Tulisan di atas Wave
                   Positioned(
                       bottom: 16, // jarak dari bawah Wave
@@ -2416,348 +2805,166 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Table(
-                      defaultVerticalAlignment:
-                          TableCellVerticalAlignment.middle,
-                      columnWidths: const {
-                        0: IntrinsicColumnWidth(), // Untuk ikon
-                        1: IntrinsicColumnWidth(), // Untuk label
-                        2: FlexColumnWidth(), // Untuk value agar rata kiri
-                      },
-                      children: [
-                        TableRow(
-                          children: [
-                            const Icon(Icons.person,
-                                size: 20, color: Colors.white),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Text(
-                                "Cashier",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4.0),
-                              child: Text(
-                                ": ${cashier ?? "-"}",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        TableRow(
-                          children: [
-                            const Icon(Icons.phone_android,
-                                size: 20, color: Colors.white),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Text(
-                                "Device",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4.0),
-                              child: Text(
-                                ": ${deviceId ?? "-"}",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        TableRow(
-                          children: [
-                            const Icon(Icons.lock,
-                                size: 20, color: Colors.white),
-                            const Padding(
-                              padding: EdgeInsets.only(left: 8.0),
-                              child: Text(
-                                "Active Session",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(left: 4.0),
-                              child: Text(
-                                ": ${sessionId ?? "-"}",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // BAGIAN ATAS (STATIS)
 
-                    const SizedBox(height: 30.0), // Beri jarak sebelum card
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 6,
-                            offset: Offset(0, 3),
-                          ),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    children: [
+                      Table(
+                        defaultVerticalAlignment:
+                            TableCellVerticalAlignment.middle,
+                        columnWidths: const {
+                          0: IntrinsicColumnWidth(),
+                          1: IntrinsicColumnWidth(),
+                          2: FlexColumnWidth(),
+                        },
+                        children: [
+                          _buildTableRow(Icons.person, "Cashier", cashier),
+                          _buildTableRow(
+                              Icons.phone_android, "Device", deviceId),
+                          _buildTableRow(
+                              Icons.lock, "Active Session", sessionId),
                         ],
                       ),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          children: [
-                            // Kolom kiri
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 16, horizontal: 12),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.shopping_cart,
-                                        color: Colors.green, size: 24),
-                                    const SizedBox(height: 6),
-                                    const Text(
-                                      "Total Cash",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      totalCash.toString(),
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                      if (GlobalState.isKasir.value) ...[
+                        const SizedBox(height: 20.0),
+                        _buildSummaryCard(totalCash, totalNonCash),
+                      ] else ...[
+                        const SizedBox(height: 45.0),
+                      ],
+                    ],
+                  ),
+                ),
 
-                            // Garis pemisah tengah
-                            VerticalDivider(
-                              color: Colors.grey.shade300,
-                              thickness: 1,
-                              width: 1,
-                            ),
-
-                            // Kolom kanan
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 16, horizontal: 12),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.shopping_cart,
-                                        color: Colors.orange, size: 24),
-                                    const SizedBox(height: 6),
-                                    const Text(
-                                      "Total Non Cash",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      totalNonCash.toString(),
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
+                // BAGIAN MENU (SCROLLABLE & RESPONSIVE)
+                Expanded(
+                  child: ConstrainedBox(
+                    // Membatasi lebar grid agar tidak "gepeng" di layar desktop
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: GridView(
+                        padding: const EdgeInsets.only(top: 8, bottom: 20),
+                        physics: const BouncingScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 100, // Lebar tombol konsisten
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          mainAxisExtent:
+                              100, // Tinggi tombol dikunci (Fixed Height)
                         ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 20.0),
-                    Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                        child: GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: crossAxisCount,
-                          crossAxisSpacing: 12.0,
-                          mainAxisSpacing: 12.0,
-                          childAspectRatio: 1,
-                          children: [
-                            _buildGridButton(
-                              context,
-                              icon: Icons.monitor,
-                              label: "POS",
-                              onPressed: handlePhoneInput,
-                            ),
-                            _buildGridButton(
-                              context,
-                              icon: Icons.table_restaurant,
-                              label: "Hold TRX",
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) => TransactionQue()),
-                                );
-                              },
-                            ),
-                            _buildGridButton(
-                              context,
-                              icon: Icons.monitor,
+                        children: [
+                          _buildMenuItem(
+                            icon: Icons.monitor,
+                            label: "POS",
+                            color: Colors.blue,
+                            onTap: handlePhoneInput,
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.table_restaurant,
+                            label: "Hold TRX",
+                            color: Colors.orange,
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) => TransactionQue())),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.analytics,
+                            label: "Product Sold",
+                            color: Colors.red,
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => const SoldScreen())),
+                          ),
+                          if (GlobalState.isKasir.value) ...[
+                            _buildMenuItem(
+                              icon: Icons.restaurant_menu,
                               label: "Catering",
-                              onPressed: () {
-                                Navigator.push(
+                              color: Colors.green,
+                              onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (context) =>
-                                          RedeemCateringScreen()),
-                                );
-                              },
+                                          RedeemCateringScreen())),
                             ),
-                            _buildGridButton(
-                              context,
+                            _buildMenuItem(
                               icon: Icons.screenshot_monitor,
                               label: "Order Online",
-                              onPressed: () {
-                                Navigator.push(
+                              color: Colors.purple,
+                              onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => OrderOnline(),
-                                  ),
-                                );
-                              },
+                                      builder: (context) => OrderOnline())),
                             ),
-                            if (GlobalState.isKasir.value) ...[
-                              _buildGridButton(
-                                context,
-                                icon: Icons.screenshot_monitor_sharp,
-                                label: "Product Sold",
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => const SoldScreen()),
-                                  );
-                                },
-                              ),
-                              _buildGridButton(
-                                context,
-                                icon: Icons.file_open,
-                                label: "Summary",
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                        builder: (_) => const EodSummary()),
-                                  );
-                                },
-                              ),
-                            ],
-                            _buildGridButton(
-                              context,
+                            _buildMenuItem(
+                              icon: Icons.file_copy,
+                              label: "Summary",
+                              color: Colors.teal,
+                              onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                      builder: (_) => const EodSummary())),
+                            ),
+                            _buildMenuItem(
                               icon: Icons.inventory,
                               label: "TRX",
-                              onPressed: () {
-                                Navigator.push(
+                              color: Colors.indigo,
+                              onTap: () => Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (context) =>
-                                          TransactionScreen()),
-                                );
-                              },
+                                          TransactionScreen())),
                             ),
-                            _buildGridButton(
-                              context,
+                            _buildMenuItem(
                               icon: isLoading
                                   ? Icons.hourglass_empty
                                   : Icons.file_download,
-                              label: "END of Day",
-                              onPressed: () async {
+                              label: "End of Day",
+                              color: Colors.blueGrey,
+                              onTap: () async {
                                 bool? shouldLogout =
                                     await _showEndOfDayDialog(context);
                                 if (shouldLogout == true) {
-                                  setState(() {
-                                    isLoading = true;
-                                  });
+                                  setState(() => isLoading = true);
                                   _handleLogout();
-                                  setState(() {
-                                    isLoading = false;
-                                  });
+                                  setState(() => isLoading = false);
                                 }
                               },
                             ),
-                            _buildGridButton(
-                              context,
-                              icon: Icons.print,
-                              label: "Setup",
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) =>
-                                          const PrinterSettingsScreen()),
-                                );
-                              },
-                            ),
-                            _buildGridButton(
-                              context,
-                              icon: Icons.logout_rounded,
-                              label: "Logout",
-                              onPressed: () {
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (context) =>
-                                          const LoginScreen()),
-                                  (route) => false,
-                                );
-                              },
-                            ),
                           ],
-                        )),
-                    const SizedBox(height: 16.0),
-                  ],
+                          _buildMenuItem(
+                            icon: Icons.settings,
+                            label: "Setup",
+                            color: Colors.brown,
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        const PrinterSettingsScreen())),
+                          ),
+                          _buildMenuItem(
+                            icon: Icons.logout_rounded,
+                            label: "Logout",
+                            color: Colors.redAccent,
+                            onTap: () => Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) => const LoginScreen()),
+                                (route) => false),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              ],
+            )
           ],
         ));
   }
@@ -2808,36 +3015,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }) {
     final primaryColor = Theme.of(context).primaryColor;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+    return Material(
+      color: Colors.white,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
         onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 6, vertical: 8), // lebih compact
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-          ),
+          padding: const EdgeInsets.all(8),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 24, color: primaryColor), // lebih kecil
-              SizedBox(height: 4),
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: 70),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: primaryColor,
-                      fontWeight: FontWeight.normal,
-                      fontSize: 10, // font lebih kecil
-                    ),
-                  ),
+              Icon(icon, size: 28, color: primaryColor),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 11,
                 ),
               ),
             ],
@@ -2852,15 +3052,32 @@ class BottomCurveClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     final path = Path();
+
+    // Mulai dari titik kiri atas
     path.lineTo(0.0, 0.0);
-    path.lineTo(0.0, size.height - 10.0);
+
+    // Garis lurus ke bawah sampai sebelum lengkungan dimulai
+    // Menggunakan persentase (90%) agar lebih fleksibel dibanding angka statis 10.0
+    double heightPoint = size.height * 0.9;
+    path.lineTo(0.0, heightPoint);
+
+    // Membuat lengkungan halus ke kanan bawah
+    // Control point berada tepat di tengah bawah (size.width / 2, size.height)
     path.quadraticBezierTo(
-        size.width / 2, size.height, size.width, size.height - 10.0);
+      size.width / 2,
+      size.height,
+      size.width,
+      heightPoint,
+    );
+
+    // Garis kembali ke titik kanan atas
     path.lineTo(size.width, 0.0);
     path.close();
+
     return path;
   }
 
   @override
-  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+  bool shouldReclip(CustomClipper<Path> oldClipper) =>
+      true; // Ubah ke true jika konten dinamis
 }

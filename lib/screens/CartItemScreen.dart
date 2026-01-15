@@ -1243,7 +1243,16 @@ class _CartItemScreenState extends State<CartItemScreen> {
       default:
         typePayment = 0;
     }
-
+    final cartItemsToSend =
+        List<Map<String, dynamic>>.from(cartItems).map((item) {
+      return {
+        'id': item['id'], // atau product_id
+        'name': item[
+            'name'], // Penting untuk mengisi product_name di database reward nanti
+        'price': double.tryParse(item['price'].toString()) ?? 0,
+        'quantity': item['quantity'] ?? 0,
+      };
+    }).toList();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1260,6 +1269,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
             total: total,
             voucherCode: voucherCode,
             isSelfService: isSelfService,
+            cartItems: cartItemsToSend,
             antrianId: antrianId),
       ),
     );
@@ -2465,7 +2475,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                       ],
                     );
                   } else {
-                    // Mobile: Column → list item di atas, detail di bawah
+                    //  : Column → list item di atas, detail di bawah
                     return Column(
                       children: [
                         Expanded(

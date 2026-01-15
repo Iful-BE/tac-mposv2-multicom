@@ -33,6 +33,7 @@ class PaymentScreen extends StatefulWidget {
   final String voucherCode;
   final bool isSelfService;
   final String? antrianId;
+  final List<Map<String, dynamic>> cartItems;
 
   const PaymentScreen(
       {super.key,
@@ -47,6 +48,7 @@ class PaymentScreen extends StatefulWidget {
       required this.rounding,
       required this.total,
       required this.voucherCode,
+      required this.cartItems,
       this.isSelfService = false,
       this.antrianId});
 
@@ -66,6 +68,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final TextEditingController waNumberController = TextEditingController();
   final TextEditingController locationController = TextEditingController();
   final TextEditingController namaController = TextEditingController();
+  TextEditingController phoneController = TextEditingController();
+  bool isRewardValid = false; // Default false
+  bool isLoadingCheck = false;
+  bool isPhoneEnabled = true;
   late double totalAmount;
   double change = 0;
   String? selectedEDC;
@@ -74,6 +80,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   List<String> edcList = [];
   List<String> get kasirList => edcList;
   List<String> get bankList => edcList;
+  int get totalQtyInCart {
+    return widget.cartItems
+        .fold(0, (sum, item) => sum + (int.parse(item['quantity'].toString())));
+  }
 
   // List<String> get kasirList =>
   //     edcList.where((e) => e.toLowerCase().startsWith("kasir")).toList();
@@ -295,6 +305,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<String?> getPhone() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('user_phone');
+  }
+
+  Future<bool?> regisMember() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('is_register_member');
   }
 
   Future<String?> customerName() async {
@@ -1121,6 +1136,86 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  // Fungsi untuk cek SharedPreferences
+  Future<void> checkMemberPhone() async {
+    final prefs = await SharedPreferences.getInstance();
+    final phone = prefs.getString('user_phone');
+
+    if (phone != null && phone.isNotEmpty) {
+      setState(() {
+        phoneController.text = phone;
+        isPhoneEnabled = false;
+      });
+      checkBackendRewards(phone);
+    } else {
+      setState(() {
+        isPhoneEnabled = true;
+      });
+    }
+  }
+
+  Future<void> checkBackendRewards(String phoneNumber) async {
+    setState(() {
+      isLoadingCheck = true;
+      isRewardValid = false; // Reset setiap kali cek
+    });
+    try {
+      final token = await getToken();
+      final domain = await getDomainFromLocalStorage();
+      final url =
+          Uri.parse('$domain/api/cek-rewards-member?phone=$phoneNumber');
+
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      });
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['dataRw'] != null) {
+        final int countRewards = data['availableRw'] ?? 0;
+        int totalQtyCart = widget.cartItems.fold(
+            0, (sum, item) => sum + (int.parse(item['quantity'].toString())));
+        if (totalQtyCart <= countRewards) {
+          setState(() {
+            isRewardValid = true; // Kuota cukup, boleh redeem
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text("Reward ditemukan dan kuota mencukupi!")),
+          );
+        } else {
+          setState(() {
+            isRewardValid = false; // Disable tombol simpan
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  "Gagal: Keranjang ($totalQtyCart item) melebihi kuota tersedia ($countRewards)."),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        _handleInvalidReward(data['message'] ?? "Tidak ada reward.");
+      }
+    } catch (e) {
+      _handleInvalidReward("Terjadi kesalahan sistem.");
+    } finally {
+      setState(() => isLoadingCheck = false);
+    }
+  }
+
+  void _handleInvalidReward(String message) {
+    setState(() {
+      isRewardValid = false;
+      phoneController.text = '';
+      selectedCompliment = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
   Future<void> checkOut() async {
     await Wakelock.enable();
 
@@ -1153,6 +1248,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final cashierId = await getUser();
       final guest = await TotalGuest();
       final orderType = await getorderType();
+      final registerMember = await regisMember();
       final antrianId = widget.antrianId ?? '';
 
       if (domain == null) {
@@ -1183,6 +1279,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'grand_total': widget.grandtotal,
           'paid': paidAmount,
           'type': type,
+          'registerMember': registerMember,
           'nowa': waNumberController.text,
           'lokasi': selectedLocation,
           'totalGuest': guest,
@@ -1216,6 +1313,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             "ref_no": refNumberController
                 .text, // Ensure you extract text from the controller
             "type": selectedEDC,
+            'registerMember': registerMember,
             'nowa': waNumberController.text,
             'lokasi': selectedLocation,
             'totalGuest': guest,
@@ -1247,6 +1345,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             "ref_no": refNumberController
                 .text, // Ensure you extract text from the controller
             "type": selectedEDC,
+            'registerMember': registerMember,
             'nowa': waNumberController.text,
             'lokasi': selectedLocation,
             'totalGuest': guest,
@@ -1288,6 +1387,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           "ref_no": refNumberController
               .text, // Ensure you extract text from the controller
           "type": 'split',
+          'registerMember': registerMember,
           'nowa': waNumberController.text,
           'lokasi': selectedLocation,
           'totalGuest': guest,
@@ -1321,6 +1421,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'lokasi': selectedLocation,
           'totalGuest': guest,
           'orderType': orderType,
+          'registerMember': registerMember,
           'customer': namaController.text,
           'description': descriptionController.text,
           'voucher_code': widget.voucherCode,
@@ -1348,6 +1449,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'lokasi': selectedLocation,
           'totalGuest': guest,
           'orderType': orderType,
+          'registerMember': registerMember,
           'customer': namaController.text,
           'description': descriptionController.text,
           'voucher_code': widget.voucherCode,
@@ -2561,6 +2663,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 const SizedBox(height: 16),
                 _buildAdditionalDescription(),
                 const SizedBox(height: 10),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text("Struk via WhatsApp"),
+                  value: sendWa,
+                  onChanged: (value) {
+                    setState(() {
+                      sendWa = value;
+                    });
+                  },
+                  activeColor: Theme.of(context).primaryColor,
+                ),
+                const SizedBox(height: 10),
                 _buildReadonlyField(
                     "No. WhatsApp", "+62 ${waNumberController.text}"),
                 const SizedBox(height: 10),
@@ -2571,7 +2685,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         : "-"),
               ]
 
-              //compliment
+              //new compliment
               else if (widget.typePayment == 300) ...[
                 const SizedBox(height: 8),
                 const Text("Compliment", style: TextStyle(fontSize: 13)),
@@ -2590,9 +2704,75 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   onChanged: (String? newValue) {
                     setState(() {
                       selectedCompliment = newValue;
+                      isRewardValid = (newValue != "REDEEM MEMBER");
                     });
+
+                    if (newValue == "REDEEM MEMBER") {
+                      checkMemberPhone();
+                    }
                   },
                 ),
+
+                // INPUT NOMOR TELEPON (Hanya muncul jika REDEEM MEMBER dipilih)
+                if (selectedCompliment == "REDEEM MEMBER") ...[
+                  const SizedBox(height: 10),
+                  const Text("Nomor member cek rewards (Enter)",
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: phoneController,
+                    enabled: isPhoneEnabled,
+                    keyboardType: TextInputType.phone,
+                    // Menangani jika user mengetik angka "0" di awal agar tidak dobel (+6208...)
+                    onChanged: (value) {
+                      if (value.startsWith('0')) {
+                        phoneController.text = value.substring(1);
+                        phoneController.selection = TextSelection.fromPosition(
+                          TextPosition(offset: phoneController.text.length),
+                        );
+                      }
+                    },
+                    decoration: InputDecoration(
+                      hintText: "8123456xxx",
+                      // Menambahkan +62 di depan input
+                      prefixIcon: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text("+62 ",
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700])),
+                      ),
+                      prefixIconConstraints:
+                          const BoxConstraints(minWidth: 0, minHeight: 0),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      fillColor:
+                          isPhoneEnabled ? Colors.white : Colors.grey[200],
+                      filled: true,
+                    ),
+
+                    onSubmitted: (val) {
+                      // Cek backend saat user selesai input manual
+                      checkBackendRewards(val);
+                    },
+                  ),
+                  if (selectedCompliment == "REDEEM MEMBER" &&
+                      !isLoadingCheck) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      isRewardValid
+                          ? "✓ Kuota mencukupi untuk $totalQtyInCart item."
+                          : "× Kuota tidak mencukupi atau belum divalidasi.",
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: isRewardValid ? Colors.green : Colors.red,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ]
+                ],
+
                 const SizedBox(height: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2636,7 +2816,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       : "-",
                 ),
               ],
-
               const SizedBox(height: 20),
 
               // BUTTON PAY & PRINT BILL
@@ -2660,15 +2839,28 @@ class _PaymentScreenState extends State<PaymentScreen> {
               if (widget.typePayment == 300)
                 Center(
                   child: ElevatedButton(
-                    onPressed: validateAndPay,
+                    onPressed: (selectedCompliment == "REDEEM MEMBER" &&
+                                !isRewardValid) ||
+                            isLoadingCheck
+                        ? null
+                        : validateAndPay,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).primaryColor,
+                      backgroundColor: (selectedCompliment == "REDEEM MEMBER" &&
+                              !isRewardValid)
+                          ? Colors.grey
+                          : Theme.of(context).primaryColor,
                       padding: const EdgeInsets.symmetric(
                           vertical: 12, horizontal: 24),
                       textStyle: const TextStyle(fontSize: 16),
                     ),
-                    child: const Text("Simpan & Cetak",
-                        style: TextStyle(color: Colors.white)),
+                    child: isLoadingCheck
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Text("Simpan & Cetak",
+                            style: TextStyle(color: Colors.white)),
                   ),
                 ),
 

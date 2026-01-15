@@ -10,12 +10,18 @@ class MemberScreen extends StatefulWidget {
   final String name;
   final int trx;
   final int point;
+  final String lastRedeem;
+  final String redeemLoc;
+  final int rewardsCount;
 
   const MemberScreen({
     super.key,
     required this.name,
     required this.trx,
     required this.point,
+    required this.lastRedeem, // Tambahkan ini
+    required this.redeemLoc, // Tambahkan ini
+    required this.rewardsCount,
   });
 
   @override
@@ -41,6 +47,33 @@ class _MemberScreenState extends State<MemberScreen> {
       return "Selamat Sore";
     } else {
       return "Selamat Malam";
+    }
+  }
+
+  String formatTanggalIndo(String tanggal) {
+    if (tanggal == "-" || tanggal.isEmpty) return "-";
+
+    try {
+      DateTime date = DateTime.parse(tanggal);
+      var bulanIndo = [
+        "",
+        "Januari",
+        "Februari",
+        "Maret",
+        "April",
+        "Mei",
+        "Juni",
+        "Juli",
+        "Agustus",
+        "September",
+        "Oktober",
+        "November",
+        "Desember"
+      ];
+
+      return "${date.day} ${bulanIndo[date.month]} ${date.year}";
+    } catch (e) {
+      return tanggal; // Jika error balikkan tanggal asli
     }
   }
 
@@ -132,6 +165,25 @@ class _MemberScreenState extends State<MemberScreen> {
         .join(' ');
   }
 
+  Widget _buildInfoRow(IconData icon, String text, {Color? textColor}) {
+    return Row(
+      children: [
+        Icon(icon,
+            size: 18,
+            color: textColor ?? Colors.blue[600]), // Ikon ikut berubah warna
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 16,
+            color: textColor ??
+                Colors.blue[700], // Jika tidak diisi, default abu-abu
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final greeting = _getGreetingMessage();
@@ -162,14 +214,13 @@ class _MemberScreenState extends State<MemberScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Halo, $greeting ${widget.name} 👋",
+                          "Halo, $greeting ${toTitleCase(widget.name)} 👋",
                           style: const TextStyle(
                             fontSize: 26,
                             fontWeight: FontWeight.bold,
                             color: Color(0xFF1A202C),
                           ),
                         ),
-
                         const SizedBox(height: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -201,28 +252,34 @@ class _MemberScreenState extends State<MemberScreen> {
                             ],
                           ),
                         ),
+                        const SizedBox(height: 8), // Jarak antar baris
 
-                        const SizedBox(height: 8),
-                        // ⬇️ Tambahkan notifikasi jika point == 10
-                        // if (widget.point == 10) ...[
-                        //   const SizedBox(height: 12),
-                        //   Container(
-                        //     padding: const EdgeInsets.all(12),
-                        //     decoration: BoxDecoration(
-                        //       color: const Color.fromARGB(
-                        //           255, 225, 243, 232), // hijau lembut
-                        //       borderRadius: BorderRadius.circular(8),
-                        //     ),
-                        //     child: Text(
-                        //       "🎉 Selamat kak ${widget.name}! Telah mendapatkan Free 1 Product karena sudah mengumpulkan 10 poin!",
-                        //       style: const TextStyle(
-                        //         color: Color(0xFF4A5568),
-                        //         fontSize: 16,
-                        //         fontWeight: FontWeight.bold,
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ],
+                        // BAGIAN DATA REDEEM (Data Baru)
+                        Padding(
+                          padding: const EdgeInsets.only(
+                              left: 0), // Diperbaiki: Menggunakan .only
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              _buildInfoRow(
+                                Icons.card_giftcard,
+                                "Rewards Tersedia: ${widget.rewardsCount}",
+                                textColor: Colors
+                                    .green[700], // Berikan warna hijau di sini
+                              ),
+                              // Baris Last Redeem (Tetap Abu-abu)
+                              _buildInfoRow(
+                                Icons.history,
+                                "Last Redeem: ${formatTanggalIndo(widget.lastRedeem)}", // Gunakan formatter di sini
+                              ),
+
+                              _buildInfoRow(Icons.location_on_outlined,
+                                  "Lokasi: ${widget.redeemLoc.toUpperCase()}"),
+                              const SizedBox(height: 4),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         const Text(
                           "Senang bisa bertemu denganmu lagi. Aku tau produk favoritmu.",
