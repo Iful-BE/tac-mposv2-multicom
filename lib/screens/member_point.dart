@@ -90,6 +90,17 @@ class _MemberPointContent extends StatelessWidget {
   final Map<String, dynamic> data;
   const _MemberPointContent({required this.data});
 
+  String toTitleCase(String text) {
+    if (text.isEmpty) return text;
+
+    return text
+        .split(' ')
+        .map((word) => word.isNotEmpty
+            ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}'
+            : '')
+        .join(' ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = data['name'] ?? 'Member';
@@ -104,7 +115,7 @@ class _MemberPointContent extends StatelessWidget {
           const Icon(Icons.card_giftcard, color: Colors.orange, size: 60),
           const SizedBox(height: 10),
           Text(
-            "Hi $name !",
+            "Hi ${toTitleCase(name)} !", // Bungkus variabel name dengan fungsi
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -117,7 +128,7 @@ class _MemberPointContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "Total Poin: $point",
+            "Total Point: $point",
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
@@ -130,7 +141,7 @@ class _MemberPointContent extends StatelessWidget {
                 border: Border.all(color: const Color(0xFF38B2AC)),
               ),
               child: Text(
-                "🎉 Selamat $name, Berhak mendapatkan free 1 Product 🎁, karena sudah mengumpulkan 10 poin!",
+                "🎉 Selamat ${toTitleCase(name)}, Berhak mendapatkan free 1 Product 🎁, karena sudah mengumpulkan 10 poin!",
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Color(0xFF285E61),
