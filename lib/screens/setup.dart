@@ -37,8 +37,8 @@ class _SetupPageState extends State<SetupPage> {
   Mode? _selectedMode;
   AfterTransaction? _afterTransaction;
   bool _aktifTabel = false;
-  String? _logoUrl; // simpan URL logo
   bool _loading = false;
+  String? _logoUrl; // simpan URL logo
   int? _logoWidth;
   int? _logoHeight;
   final _widthController = TextEditingController();

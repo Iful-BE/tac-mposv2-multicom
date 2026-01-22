@@ -51,6 +51,11 @@ class _CartItemScreenState extends State<CartItemScreen> {
   bool isLoading = true;
   bool kurangiDariPoint = false;
   double point = 0;
+  double discPoint = 0;
+  double nominalPoint = 0;
+  double tempDp = 0;
+  double skemaMember = 0;
+  bool isMember = false;
   bool isCalculating = false;
   double subtotal = 0;
   double grandtotal = 0;
@@ -60,6 +65,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
   double svc1 = 0;
   double svcharge = 0;
   double total = 0;
+  double totalQty = 0;
   double gt = 0;
   double rounding = 0;
   String voucherCode = '';
@@ -69,6 +75,8 @@ class _CartItemScreenState extends State<CartItemScreen> {
   String variantString = '';
   bool isSplitMode = true;
   List<Map<String, dynamic>> splitItems = [];
+  Map<String, dynamic>? tempSales;
+
   String? role;
 
   final TextEditingController _voucherController = TextEditingController();
@@ -76,6 +84,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
   bool _isLoadingVoucher = false;
   String _barcodeBuffer = ""; // penampung input barcode
   String? userRole;
+
   String formatRupiah(double value) {
     final formatter =
         NumberFormat.currency(locale: 'id', symbol: 'Rp', decimalDigits: 0);
@@ -126,6 +135,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
       await getTax();
       await getsvCharge();
 
+      await getPoint();
       // === HANYA PANGGIL DISCOUNT KALAU VOUCHER TIDAK KOSONG ===
       if (voucherCode.isNotEmpty) {
         await getDiscount();
@@ -796,7 +806,8 @@ class _CartItemScreenState extends State<CartItemScreen> {
     final domain = await getDomainFromLocalStorage();
     final phone = await getPhone();
     final response = await http.get(
-      Uri.parse('$domain/api/cart/getPoint?phone=$phone'),
+      Uri.parse(
+          '$domain/api/cart/getPoint?sub_branch=${widget.subBranch}&phone=$phone'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
@@ -806,8 +817,28 @@ class _CartItemScreenState extends State<CartItemScreen> {
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       setState(() {
+        isMember = data['is_member'] ?? false;
+        if (!isMember) {
+          kurangiDariPoint = false;
+        }
         // Pastikan point bertipe double
         point = double.tryParse(data['total_point'].toString()) ?? 0.0;
+        skemaMember = double.tryParse(data['type_member'].toString()) ?? 0.0;
+        nominalPoint = double.tryParse(data['nominal_point'].toString()) ?? 0.0;
+        tempDp =
+            double.tryParse(data['temp_sales']?['dp']?.toString() ?? '0') ??
+                0.0;
+        tempSales = data['temp_sales'] != null
+            ? {
+                'name': data['temp_sales']['name'] ?? '',
+                'sales_id': data['temp_sales']['sales_id'] ?? '',
+                'agent_id': data['temp_sales']['agent_id'] ?? '',
+                'agent_pic': data['temp_sales']['agent_pic'] ?? '',
+                'dp': data['temp_sales']['dp'] ?? '',
+                'paytype': data['temp_sales']['payment_type'] ?? '',
+              }
+            : null;
+
         calculateTotals();
       });
     } else {
@@ -940,7 +971,6 @@ class _CartItemScreenState extends State<CartItemScreen> {
     final selectedVoucher = await showDialog<String>(
       context: context,
       builder: (context) {
-        // ✅ kalau masih loading, tampilkan indikator loading
         if (_isLoadingVoucher) {
           return const AlertDialog(
             title: Text("Voucher"),
@@ -1067,7 +1097,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
   }
 
   void calculateTotals() {
-    // reset dulu
+    // reset
     subtotal = 0.0;
     total = 0.0;
     svc1 = 0.0;
@@ -1075,143 +1105,224 @@ class _CartItemScreenState extends State<CartItemScreen> {
     tax1 = 0.0;
     grandtotal = 0.0;
     rounding = 0.0;
+    totalQty = 0;
 
-    // Cek apakah ADA item yg mematikan tax / svc
+    totalQty = cartItems.fold(
+      0,
+      (sum, item) => sum + (item['quantity'] as int),
+    );
+
+    // cek apakah ada item yang mematikan tax / svc
     bool disableTax = cartItems.any((item) => item['tax'] == 1);
     bool disableSvc = cartItems.any((item) => item['svc'] == 1);
 
-    // Hitung subtotal
     subtotal = cartItems.fold(
       0.0,
       (sum, item) => sum + (item['price'] * item['quantity']),
     );
-
-    // Total = subtotal - diskon
     total = subtotal - discount;
-
-    // Hitung service charge jika TIDAK dimatikan item
-    double svcPercentage = svcharge;
-    svc1 = disableSvc ? 0 : (total * (svcPercentage / 100));
-
-    // kurangi point
-    if (kurangiDariPoint == true) {
-      total -= point;
-    }
-
+    svc1 = disableSvc ? 0 : (total * (svcharge / 100));
+    discPoint = point * nominalPoint;
     gt = total + svc1;
-
-    // Hitung pajak
-    double taxPercentage = tax;
-    tax1 = disableTax ? 0 : (gt * (taxPercentage / 100));
-
+    tax1 = disableTax ? 0 : (gt * (tax / 100));
     double rawGrandTotal = gt + tax1;
-
-    // Rounding
     double remainder = rawGrandTotal % 100;
-    if (remainder > 0 && remainder < 100) {
-      grandtotal = rawGrandTotal + (100 - remainder);
-    } else {
-      grandtotal = rawGrandTotal;
-    }
+    grandtotal = (remainder > 0 && remainder < 100)
+        ? rawGrandTotal + (100 - remainder)
+        : rawGrandTotal;
 
     rounding = grandtotal - rawGrandTotal;
+    if (kurangiDariPoint == true) {
+      grandtotal -= discPoint;
+    }
+    //grandtotal -= tempDp;
+    // if (grandtotal < 0) {
+    //   grandtotal = 0;
+    // }
   }
 
   void _showPaymentMethodDialog() {
-    showDialog(
+    bool isWajibSplit = skemaMember == 1 && tempDp > 0;
+
+    showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Pilih Metode Pembayaran"),
-          content: Column(
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ListTile(
-                leading: const Icon(
-                  Icons.attach_money,
-                  color: Colors.green, // Icon color for Cash
-                ),
-                title: const Text(
-                  "Cash",
-                  style: TextStyle(color: Colors.green), // Text color for Cash
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _checkCustomerAndProceed("Cash");
-                },
-                tileColor:
-                    Colors.transparent, // Transparent background for Cash
-                textColor: Colors.green, // Text color to match the green
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Metode Pembayaran",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  )
+                ],
               ),
-              ListTile(
-                leading: const Icon(
-                  Icons.credit_card,
-                  color: Colors.blue, // Icon color for Non-Cash
+              const SizedBox(height: 10),
+              if (isWajibSplit)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.red.shade700, size: 20),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          "DP terdeteksi. Silakan gunakan Split Payment.",
+                          style: TextStyle(color: Colors.red, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                title: const Text(
-                  "Non-Cash",
-                  style:
-                      TextStyle(color: Colors.blue), // Text color for Non-Cash
+              const SizedBox(height: 15),
+
+              // Opsi Pembayaran
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      if (skemaMember == 1) ...[
+                        _buildPaymentCard(
+                          title: "Cash",
+                          icon: Icons.attach_money,
+                          color: Colors.green,
+                          enabled: !isWajibSplit,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _checkCustomerAndProceed("Cash");
+                          },
+                        ),
+                        _buildPaymentCard(
+                          title: "Non-Cash",
+                          icon: Icons.credit_card,
+                          color: Colors.blue,
+                          enabled: !isWajibSplit,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _checkCustomerAndProceed("Non-Cash");
+                          },
+                        ),
+                      ] else ...[
+                        _buildPaymentCard(
+                          title: "Cash",
+                          icon: Icons.attach_money,
+                          color: Colors.green,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _checkCustomerAndProceed("Cash");
+                          },
+                        ),
+                        _buildPaymentCard(
+                          title: "Non-Cash",
+                          icon: Icons.credit_card,
+                          color: Colors.blue,
+                          onTap: () {
+                            Navigator.pop(context);
+                            _checkCustomerAndProceed("Non-Cash");
+                          },
+                        ),
+                      ],
+                      _buildPaymentCard(
+                        title: "Split Payment",
+                        icon: Icons.call_split,
+                        color: Colors.purple,
+                        isHighlighted: isWajibSplit,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _checkCustomerAndProceed("Split-pay");
+                        },
+                      ),
+                      _buildPaymentCard(
+                        title: "Compliment",
+                        icon: Icons.card_giftcard,
+                        color: Colors.orange,
+                        enabled: !isWajibSplit,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _checkCustomerAndProceed("Compliment");
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _checkCustomerAndProceed("Non-Cash");
-                },
-                tileColor:
-                    Colors.transparent, // Transparent background for Non-Cash
-                textColor: Colors.blue, // Text color to match the blue
               ),
-              ListTile(
-                leading: const Icon(Icons.call_split, color: Colors.purple),
-                title: const Text("Split Payment",
-                    style: TextStyle(color: Colors.purple)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _checkCustomerAndProceed("Split-pay");
-                },
-              ),
-              ListTile(
-                leading: const Icon(
-                  Icons.credit_card,
-                  color: Colors.orange, // Icon color for Non-Cash
-                ),
-                title: const Text(
-                  "Compliment",
-                  style: TextStyle(
-                      color: Colors.orange), // Text color for Non-Cash
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _checkCustomerAndProceed("Compliment");
-                },
-                tileColor:
-                    Colors.transparent, // Transparent background for Non-Cash
-                textColor: Colors.orange, // Text color to match the blue
-              ),
-              /*
-              ListTile(
-                leading: const Icon(
-                  Icons.qr_code,
-                  color: Colors.orange, // Icon color for Non-Cash
-                ),
-                title: const Text(
-                  "QRIS",
-                  style: TextStyle(
-                      color: Colors.orange), // Text color for Non-Cash
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _navigateToPaymentScreen("QRIS", widget.isSelfService);
-                },
-                tileColor:
-                    Colors.transparent, // Transparent background for Non-Cash
-                textColor: Colors.orange, // Text color to match the blue
-              ),
-              */
             ],
           ),
         );
       },
+    );
+  }
+
+// Helper widget untuk membuat card metode pembayaran
+  Widget _buildPaymentCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+    bool enabled = true,
+    bool isHighlighted = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isHighlighted ? color : Colors.grey.shade200,
+          width: isHighlighted ? 2 : 1,
+        ),
+        color: enabled ? Colors.white : Colors.grey.shade50,
+      ),
+      child: ListTile(
+        enabled: enabled,
+        onTap: enabled ? onTap : null,
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color:
+                enabled ? color.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: enabled ? color : Colors.grey),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: enabled ? Colors.black87 : Colors.grey,
+          ),
+        ),
+        trailing: isHighlighted
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  "Wajib",
+                  style: TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              )
+            : const Icon(Icons.chevron_right, size: 20),
+      ),
     );
   }
 
@@ -1222,6 +1333,16 @@ class _CartItemScreenState extends State<CartItemScreen> {
 
   void _navigateToPaymentScreen(
       String paymentMethod, bool isSelfService, String? antrianId) {
+    if (kurangiDariPoint) {
+      if (point <= 0 || discPoint <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text(
+                  "Poin atau Diskon Poin tidak boleh 0 jika opsi kurangi poin dipilih")),
+        );
+        return;
+      }
+    }
     int typePayment;
 
     switch (paymentMethod) {
@@ -1257,20 +1378,26 @@ class _CartItemScreenState extends State<CartItemScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => PaymentScreen(
-            sessionId: getSession.toString(),
-            subBranch: getBranchFromLocalStorage.toString(),
-            typePayment: typePayment,
-            subtotal: subtotal,
-            grandtotal: grandtotal,
-            discount: discount,
-            tax: tax1,
-            svc: svc1,
-            rounding: rounding,
-            total: total,
-            voucherCode: voucherCode,
-            isSelfService: isSelfService,
-            cartItems: cartItemsToSend,
-            antrianId: antrianId),
+          sessionId: getSession.toString(),
+          subBranch: getBranchFromLocalStorage.toString(),
+          typePayment: typePayment,
+          subtotal: subtotal,
+          grandtotal: grandtotal,
+          discount: discount,
+          tax: tax1,
+          svc: svc1,
+          rounding: rounding,
+          total: total,
+          totalQty: totalQty,
+          voucherCode: voucherCode,
+          isSelfService: isSelfService,
+          cartItems: cartItemsToSend,
+          tempSales: tempSales,
+          antrianId: antrianId,
+          kurangiDariPoint: kurangiDariPoint,
+          pointUsed: point,
+          pointDiscount: discPoint,
+        ),
       ),
     );
   }
@@ -1302,7 +1429,8 @@ class _CartItemScreenState extends State<CartItemScreen> {
   Widget _buildRow(
     BuildContext context,
     String label,
-    String value, {
+    String? value, {
+    Widget? valueWidget,
     VoidCallback? onDelete,
   }) {
     return Padding(
@@ -1310,40 +1438,12 @@ class _CartItemScreenState extends State<CartItemScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Text(label, style: const TextStyle(fontSize: 13)),
-              // if (onDelete != null) ...[
-              //   const SizedBox(width: 5),
-              //   GestureDetector(
-              //     onTap: () {
-              //       showDialog(
-              //         context: context,
-              //         builder: (_) => AlertDialog(
-              //           title: const Text("Konfirmasi"),
-              //           content: const Text("Yakin ingin menghapus?"),
-              //           actions: [
-              //             TextButton(
-              //               onPressed: () => Navigator.pop(context),
-              //               child: const Text("Tidak"),
-              //             ),
-              //             TextButton(
-              //               onPressed: () {
-              //                 Navigator.pop(context);
-              //                 onDelete();
-              //               },
-              //               child: const Text("Ya"),
-              //             ),
-              //           ],
-              //         ),
-              //       );
-              //     },
-              //     child: const Icon(Icons.close, size: 16, color: Colors.red),
-              //   ),
-              // ]
-            ],
-          ),
-          Text(value, style: const TextStyle(fontSize: 13)),
+          Text(label, style: const TextStyle(fontSize: 13)),
+          valueWidget ??
+              Text(
+                value ?? '',
+                style: const TextStyle(fontSize: 13),
+              ),
         ],
       ),
     );
@@ -2060,12 +2160,12 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                                             splitItems
                                                                 .add(item);
                                                             splitTotal +=
-                                                                itemTotal; // 🟢 Tambah total
+                                                                itemTotal;
                                                           } else {
                                                             splitItems
                                                                 .remove(item);
                                                             splitTotal -=
-                                                                itemTotal; // 🔴 Kurangi total
+                                                                itemTotal;
                                                             if (splitTotal < 0)
                                                               splitTotal = 0;
                                                           }
@@ -2407,6 +2507,52 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 10),
+                                if (skemaMember == 1 && isMember) ...[
+                                  _buildRow(
+                                    context,
+                                    'Poin:',
+                                    null,
+                                    valueWidget: Text(
+                                      '${point.toInt()} pts',
+                                      style: const TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  _buildRow(
+                                    context,
+                                    'Nominal @1 Poin:',
+                                    formatRupiah(nominalPoint),
+                                  ),
+                                  _buildRow(
+                                    context,
+                                    'Disc Poin:',
+                                    formatRupiah(discPoint),
+                                  ),
+                                  // Checkbox untuk kurangi discPoint dari total
+                                  Row(
+                                    children: [
+                                      Checkbox(
+                                        value:
+                                            kurangiDariPoint, // otomatis true/false dari state
+                                        onChanged: (value) {
+                                          setState(() {
+                                            kurangiDariPoint =
+                                                value ?? false; // update state
+                                            calculateTotals(); // recalc total
+                                          });
+                                        },
+                                      ),
+                                      const Text(
+                                        'Gunakan poin',
+                                        style: TextStyle(fontSize: 13),
+                                      ),
+                                      const Divider(thickness: 1),
+                                    ],
+                                  ),
+                                  const Divider(thickness: 1),
+                                ],
 
                                 _buildRow(context, 'Subtotal:',
                                     formatRupiah(subtotal)),
@@ -2427,10 +2573,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                     });
                                   },
                                 ),
-
-                                const Divider(thickness: 1),
-
-// TAX (PB1)
+                                // TAX (PB1)
                                 _buildRow(
                                   context,
                                   'PB1 $formattedTax% (+):',
@@ -2468,6 +2611,40 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                     ),
                                   ],
                                 ),
+
+                                if (tempSales != null && skemaMember == 1) ...[
+                                  const Divider(thickness: 1),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    'Sales ID: ${tempSales!['sales_id']}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    'Agent ID: ${tempSales!['agent_id']}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    'PIC: ${tempSales!['agent_pic']}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  Text(
+                                    'Customer: ${tempSales!['name']}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Payment: ${tempSales!['paytype']}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  _buildRow(
+                                    context,
+                                    'DP:',
+                                    formatRupiah(double.tryParse(
+                                            tempSales!['dp'].toString()) ??
+                                        0),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -2891,7 +3068,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                       ),
                                     ),
                                   ),
-
+                                  //mobile cart info
                                   const SizedBox(width: 8),
 
                                   // Tombol gunakan voucher
@@ -2918,6 +3095,52 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                 ],
                               ),
                               const SizedBox(height: 10),
+                              if (skemaMember == 1 && isMember) ...[
+                                _buildRow(
+                                  context,
+                                  'Poin:',
+                                  null,
+                                  valueWidget: Text(
+                                    '${point.toInt()} pts',
+                                    style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                _buildRow(
+                                  context,
+                                  'Nominal @1 Poin:',
+                                  formatRupiah(nominalPoint),
+                                ),
+                                _buildRow(
+                                  context,
+                                  'Disc Poin:',
+                                  formatRupiah(discPoint),
+                                ),
+                                // Checkbox untuk kurangi discPoint dari total
+                                Row(
+                                  children: [
+                                    Checkbox(
+                                      value:
+                                          kurangiDariPoint, // otomatis true/false dari state
+                                      onChanged: (value) {
+                                        setState(() {
+                                          kurangiDariPoint =
+                                              value ?? false; // update state
+                                          calculateTotals(); // recalc total
+                                        });
+                                      },
+                                    ),
+                                    const Text(
+                                      'Gunakan poin',
+                                      style: TextStyle(fontSize: 13),
+                                    ),
+                                    const Divider(thickness: 1),
+                                  ],
+                                ),
+                                const Divider(thickness: 1),
+                              ],
 
                               _buildRow(
                                   context, 'Subtotal:', formatRupiah(subtotal)),
@@ -2937,8 +3160,6 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                   });
                                 },
                               ),
-
-                              const Divider(thickness: 1),
 
 // TAX (PB1)
                               _buildRow(
@@ -2978,6 +3199,39 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                   ),
                                 ],
                               ),
+                              if (tempSales != null && skemaMember == 1) ...[
+                                const Divider(thickness: 1),
+                                const SizedBox(height: 5),
+                                Text(
+                                  'Sales ID: ${tempSales!['sales_id']}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  'Agent ID: ${tempSales!['agent_id']}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  'PIC: ${tempSales!['agent_pic']}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Text(
+                                  'Customer: ${tempSales!['name']}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Text(
+                                  'Payment: ${tempSales!['paytype']}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                _buildRow(
+                                  context,
+                                  'DP:',
+                                  formatRupiah(double.tryParse(
+                                          tempSales!['dp'].toString()) ??
+                                      0),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -3026,15 +3280,31 @@ class _CartItemScreenState extends State<CartItemScreen> {
                         }
 
                         if (isKasir) {
-                          if (subtotal > 0 ||
-                              (cartItems.isNotEmpty && subtotal == 0)) {
-                            _showPaymentMethodDialog();
-                          } else {
+                          // 1. Cek apakah keranjang kosong
+                          if (cartItems.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('Tidak ada item di keranjang.'),
+                                  content:
+                                      Text('Tidak ada item di keranjang.')),
+                            );
+                            return; // Berhenti di sini
+                          }
+
+                          // 2. Cek apakah hasil akhir (grandtotal) bernilai minus
+                          // Ini penting jika DP atau Poin > Tagihan
+                          if (grandtotal < 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Total tagihan minus! Periksa kembali Poin atau DP.'),
+                                backgroundColor: Colors.red,
                               ),
                             );
+                          }
+                          // 3. Jika grandtotal 0 atau lebih, baru boleh bayar
+                          else if (subtotal > 0 ||
+                              (cartItems.isNotEmpty && subtotal == 0)) {
+                            _showPaymentMethodDialog();
                           }
                         } else {
                           showNoteDialog();

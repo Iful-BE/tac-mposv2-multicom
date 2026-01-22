@@ -7,38 +7,41 @@ import 'package:http/http.dart' as http;
 
 Future<bool?> showMemberPointDialog(BuildContext context, bool after) async {
   final data = await _fetchCrmData();
+  //debugPrint("Isi data dari CRM: $data");
+  if (data == null) {
+    //debugPrint("Data null, dialog dibatalkan.");
+    return false;
+  }
+  if (data.isEmpty) {
+    //debugPrint("Data member kosong ({}), dialog dibatalkan.");
+    return false;
+  }
 
   return await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    useRootNavigator: true, // ✅ muncul di atas loading
+    useRootNavigator: true,
     builder: (BuildContext context) {
       return AlertDialog(
-        content: data != null
-            ? _MemberPointContent(data: data)
-            : const Padding(padding: EdgeInsets.all(20)),
+        // Bungkus dengan SingleChildScrollView agar tidak overflow di layar kecil
+        content: SingleChildScrollView(
+          child: _MemberPointContent(data: data),
+        ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).primaryColor,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
-              // ✅ Kembalikan nilai, jangan navigate di sini
-              Navigator.of(context, rootNavigator: true).pop(true);
-            },
+            onPressed: () =>
+                Navigator.of(context, rootNavigator: true).pop(true),
             child: const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Text(
-                "Tutup",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text("Tutup",
+                  style: TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ),
         ],

@@ -63,7 +63,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     Wakelock.enable();
-    _loadDataFromLocal();
     loadRole();
     _loadSavedPrinter();
     _loadUserData();
@@ -104,55 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _latestVersion = version;
       });
     }
-  }
-
-  Future<void> _loadDataFromLocal() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Ambil data dari local
-    String? savedPhone = prefs.getString('user_phone'); // Format: 62812...
-    bool? savedMemberStatus = prefs.getBool('is_register_member');
-
-    if (savedPhone != null && savedPhone.startsWith('62')) {
-      // Kembalikan ke format input (tanpa 62) untuk ditampilkan di TextField
-      String displayPhone = savedPhone.substring(2);
-
-      setState(() {
-        phoneController.text = displayPhone;
-        // Hanya set true jika status di local true DAN nomor tidak kosong
-        isRegisterMember =
-            (savedMemberStatus ?? false) && displayPhone.isNotEmpty;
-      });
-    }
-  }
-
-  Future<void> clearCustomerData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user_phone');
-    await prefs.remove('is_register_member');
-    phoneController.clear();
-    setState(() {
-      isRegisterMember = false;
-    });
-  }
-
-  // Tambahkan parameter String value
-  Future<void> _saveCustomerDataToLocal(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Gunakan parameter 'value' bukan phoneController.text
-    if (value.isEmpty) {
-      await prefs.remove('user_phone');
-      await prefs.setBool('is_register_member', false);
-      return;
-    }
-
-    String input = value;
-    if (input.startsWith('0')) input = input.substring(1);
-    String formattedPhone = "62$input";
-
-    await prefs.setString('user_phone', formattedPhone);
-    await prefs.setBool('is_register_member', isRegisterMember);
   }
 
   Future<String?> getRole() async {
@@ -966,12 +916,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     controller: guestController,
                     keyboardType: TextInputType.number,
                     autofocus: true,
+                    // 1. Membatasi input maksimal 3 karakter
+                    maxLength: 3,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
                     ],
                     decoration: InputDecoration(
                       labelText: "Jumlah Tamu",
                       errorText: guestError,
+                      // 2. Menyembunyikan label penghitung (0/3) di bawah field
+                      counterText: "",
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -985,68 +939,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     LengthLimitingTextInputFormatter(13),
                   ],
                   decoration: InputDecoration(
-                    // Hapus 'const' di sini
                     labelText: "No Whatsapp",
-                    errorText:
-                        phoneError, // Variabel ini penyebab error jika ada const di atas
+                    errorText: phoneError,
                     prefixText: "+62 ",
-                    border:
-                        const OutlineInputBorder(), // Anda bisa taruh 'const' di sini saja
                   ),
-                  // Kita tetap panggil simpan ke local saat mengetik
-                  onChanged: (value) {
-                    setState(() {
-                      if (value.isEmpty) {
-                        isRegisterMember = false;
-                      }
-                    });
-                    // Kirim value ke fungsi simpan
-                    _saveCustomerDataToLocal(value);
-                  },
                 ),
                 const SizedBox(height: 10),
-
-                // --- BAGIAN PENYELESAI MASALAH ---
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: phoneController,
-                  builder: (context, value, child) {
-                    // Logika validasi: minimal 9 digit
-                    bool isValid = value.text.length >= 9;
-
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: isValid
-                            ? Colors.green.withOpacity(0.05)
-                            : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: SwitchListTile(
-                        title: Text(
-                          "Daftarkan sebagai Member,input nomor dan aktifkan.",
-                          style: TextStyle(
-                            fontSize:
-                                12, // Ukuran teks diperkecil (standar biasanya 16)
-                            fontWeight: FontWeight
-                                .w500, // Tidak terlalu tebal, tidak terlalu tipis
-                            color: isValid ? Colors.black87 : Colors.grey,
-                          ),
-                        ),
-                        // Switch hanya bisa menyala jika isValid TRUE
-                        value: isValid ? isRegisterMember : false,
-                        activeColor: Colors.green,
-                        onChanged: isValid
-                            ? (bool newValue) {
-                                setState(() {
-                                  isRegisterMember = newValue;
-                                });
-                                // Simpan status member terbaru dengan teks yang ada di controller
-                                _saveCustomerDataToLocal(phoneController.text);
-                              }
-                            : null, // Otomatis disable jika nomor kurang dari 9 digit
-                      ),
-                    );
-                  },
-                ),
               ],
             ),
             actionsAlignment: MainAxisAlignment.spaceBetween,

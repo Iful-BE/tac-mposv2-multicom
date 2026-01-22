@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import '../theme_controller.dart'; // atau sesuaikan path-nya
 import 'package:wakelock/wakelock.dart';
 import 'package:dio/dio.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 //import 'package:install_plugin/install_plugin.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -28,6 +29,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   Future<String>? _branchesFuture;
   String _savedSubDevice = '';
+  String? _logoUrl;
+  int? _logoWidth;
+  int? _logoHeight;
+  final _widthController = TextEditingController();
+  final _heightController = TextEditingController();
 
   static const String noInternetMessage =
       "No internet connection. Please check your network.";
@@ -37,7 +43,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     Wakelock.enable();
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await checkAndUpdateBackend(context);
       await _checkVersionOnAppStart();
@@ -47,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     });
     _loadSubDevice();
+
     _branchesFuture = _getBranches();
   }
 
@@ -55,6 +61,87 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _savedSubDevice = result.trim();
     });
+  }
+
+  Future<void> _loadConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      // load logo url
+      _logoUrl = prefs.getString("logo_url");
+      _logoWidth = prefs.getInt("logo_width") ?? 200; // default 200 px
+      _logoHeight = prefs.getInt("logo_height"); // null = auto
+      _widthController.text = _logoWidth.toString();
+      _heightController.text = _logoHeight?.toString() ?? "";
+    });
+  }
+
+  /// --- Set Logo (hanya simpan URL, caching otomatis diatur library) ---
+
+  /// --- Widget Logo ---
+  Widget _buildLogo() {
+    // Mengambil warna utama yang sedang aktif (Blue, Green, Red, dll)
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // LOGO 1: Logo MJN (Selalu dari Assets)
+        Image.asset(
+          'assets/mjn-logo.png',
+          height: 45,
+          width: 45,
+          // Jika asset tidak ketemu, tampilkan icon dengan warna tema
+          errorBuilder: (c, e, s) =>
+              Icon(Icons.flash_on, size: 40, color: primaryColor),
+        ),
+
+        // Tanda "x" di tengah
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            "x",
+            style: TextStyle(
+              fontSize: 18,
+              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+
+        // LOGO 2: Logo dari Setup (Cached Network Image)
+        SizedBox(
+          width: 45,
+          height: 45,
+          child: (_logoUrl == null || _logoUrl!.isEmpty)
+              ? Icon(
+                  Icons.business,
+                  size: 40,
+                  color: primaryColor, // Warna icon gedung sesuai tema
+                )
+              : CachedNetworkImage(
+                  imageUrl: _logoUrl!,
+                  fit: BoxFit.contain,
+                  placeholder: (context, url) => Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            primaryColor), // Warna loading sesuai tema
+                      ),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) {
+                    return Icon(Icons.business,
+                        size: 40,
+                        color: primaryColor); // Warna icon error sesuai tema
+                  },
+                ),
+        ),
+      ],
+    );
   }
 
   Future<String> _getBranches() async {
@@ -295,270 +382,415 @@ class _LoginScreenState extends State<LoginScreen> {
     'Blush': const Color(0xFF7E675E),
     'Pink': Colors.pink,
   };
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1, // Lebih soft
-        centerTitle: true,
-        title: const Text(
-          "", // Ganti jika kosong
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 16.5,
-            fontWeight: FontWeight.w600,
-          ),
+  void _showModernActionMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert, color: Theme.of(context).primaryColor),
-            padding: const EdgeInsets.only(right: 10),
-            onSelected: (value) async {
-              if (value == 'printer') {
-                _showPrinterSettings();
-              } else if (value == 'setup') {
-                _showSetup();
-              } else if (value == 'sync') {
-                // 🔹 Tambahkan konfirmasi sebelum sinkronisasi
-                final bool? confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text("Konfirmasi Sinkronisasi"),
-                    content: const Text(
-                      "Apakah Anda yakin ingin melakukan sinkronisasi?\n"
-                      "Data cabang lama akan dihapus.",
-                    ),
-                    actions: [
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor:
-                              Theme.of(context).primaryColor.withOpacity(0.8),
-                        ),
-                        onPressed: () => Navigator.pop(context, false),
-                        child: const Text("Batal"),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Theme.of(context).primaryColor,
-                        ),
-                        onPressed: () => Navigator.pop(context, true),
-                        child: const Text("Lanjut"),
-                      ),
-                    ],
-                  ),
-                );
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle Bar (Indikator Geser)
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(10)),
+            ),
 
-                if (confirm == true) {
-                  _syncData();
-                }
-              } else if (value.startsWith('theme_')) {
-                final colorKey = value.split('_')[1];
-                final selectedColor = themeColors[colorKey];
-                if (selectedColor != null) {
-                  ThemeController.setThemeColor(selectedColor);
-                }
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'branchInfo',
-                child: FutureBuilder<String>(
-                  future: _branchesFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Text("Memuat...");
-                    } else if (snapshot.hasError) {
-                      return Text(
-                        "Gagal: ${snapshot.error}",
-                        style: TextStyle(
-                            color: Theme.of(context).primaryColor,
-                            fontSize: 12),
-                      );
-                    } else {
-                      return Text(
-                        snapshot.data!,
-                        style: const TextStyle(
-                            fontSize: 12.5, fontWeight: FontWeight.w500),
-                      );
-                    }
-                  },
-                ),
+            // Informasi Cabang (Header)
+            _buildBranchHeader(),
+
+            const Divider(height: 1),
+
+            // List Menu Utama
+            _buildMenuTile(
+                icon: Icons.print_rounded,
+                title: "Pengaturan Printer",
+                onTap: () {
+                  Navigator.pop(context);
+                  _showPrinterSettings();
+                }),
+            _buildMenuTile(
+                icon: Icons.sync_rounded,
+                title: "Sinkronisasi Data",
+                color: Colors.blueAccent,
+                onTap: () {
+                  Navigator.pop(context);
+                  _handleSyncAction(context);
+                }),
+            _buildMenuTile(
+                icon: Icons.settings_suggest_rounded,
+                title: "Setup Aplikasi",
+                onTap: () {
+                  Navigator.pop(context);
+                  _showSetup();
+                }),
+
+            const Divider(),
+
+            // Pemilih Tema (Horizontal Scroll agar lebih compact)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text("Tema Warna",
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: Colors.grey))),
+            ),
+            SizedBox(
+              height: 70,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: themeColors.entries
+                    .map((entry) => _buildThemeCircle(entry.key, entry.value))
+                    .toList(),
               ),
-              const PopupMenuItem(
-                value: 'printer',
-                child:
-                    Text("Pengaturan Printer", style: TextStyle(fontSize: 13)),
-              ),
-              const PopupMenuItem(
-                value: 'sync',
-                child: Text("Sinkronisasi", style: TextStyle(fontSize: 13)),
-              ),
-              const PopupMenuItem(
-                value: 'setup',
-                child: Text("Setup Aplikasi", style: TextStyle(fontSize: 13)),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                enabled: false,
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuTile(
+      {required IconData icon,
+      required String title,
+      required VoidCallback onTap,
+      Color? color}) {
+    return ListTile(
+      leading: Icon(icon, color: color ?? Colors.black87),
+      title: Text(title,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildThemeCircle(String name, Color color) {
+    return InkWell(
+      onTap: () => ThemeController.setThemeColor(color),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black12)),
+            ),
+            const SizedBox(height: 4),
+            Text(name.toUpperCase(), style: const TextStyle(fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBranchHeader() {
+    return FutureBuilder<String>(
+      future: _branchesFuture,
+      builder: (context, snapshot) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Row(
+            children: [
+              const CircleAvatar(child: Icon(Icons.storefront_rounded)),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Text(
-                  "Tema Warna",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  snapshot.data ?? "Memuat info cabang...",
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-              ...themeColors.entries.map((entry) {
-                return PopupMenuItem(
-                  value: 'theme_${entry.key}',
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: entry.value,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.black26),
-                        ),
-                      ),
-                      Text(entry.key.toUpperCase(),
-                          style: const TextStyle(fontSize: 12.5)),
-                    ],
-                  ),
-                );
-              }),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _handleSyncAction(BuildContext context) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 10),
+            Text("Sinkronisasi"),
+          ],
+        ),
+        content: const Text(
+            "Apakah Anda yakin? Data cabang lama akan digantikan dengan data terbaru dari server."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Batal", style: TextStyle(color: Colors.grey[600])),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Sinkronkan Sekarang"),
           ),
         ],
       ),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.white,
-              Theme.of(context).primaryColor,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo
-                  Image.asset(
-                    'assets/mjn-logo.png',
-                    height: 70,
-                    width: 70,
-                  ),
-                  const SizedBox(height: 12),
+    );
 
-                  // Form Card
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 380),
-                    child: Card(
-                      elevation: 3,
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
+    if (confirm == true) _syncData();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Mengambil warna utama dari tema yang aktif
+    bool isTablet = MediaQuery.of(context).size.width > 600;
+    double bottomPadding = MediaQuery.of(context).padding.bottom;
+    final primaryColor = Theme.of(context).primaryColor;
+
+    return Scaffold(
+      resizeToAvoidBottomInset: true,
+      // 1. Tambahkan ini agar body naik ke atas melewati AppBar
+      extendBodyBehindAppBar: true,
+      backgroundColor: const Color(0xFFF5F7FA),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          "",
+          style: TextStyle(
+              color: Colors.white, fontSize: 16.5, fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.tune_rounded,
+                color: Colors.white), // Icon lebih modern
+            onPressed: () => _showModernActionMenu(context),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // HEADER BACKGROUND DENGAN GAMBAR
+          Container(
+            height:
+                MediaQuery.of(context).size.height * (isTablet ? 0.60 : 0.65),
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: primaryColor,
+              image: DecorationImage(
+                image: const AssetImage('assets/bg-pattern.png'),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(
+                  primaryColor.withOpacity(0.55),
+                  BlendMode.dstATop,
+                ),
+              ),
+            ),
+          ),
+
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Column(
+                children: [
+                  const SizedBox(height: 10),
+                  // --- HEADER DENGAN LOGO DI SEBELAH KIRI TEKS ---
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment
+                        .center, // Logo dan Teks sejajar tengah secara vertikal
+                    children: [
+                      // LOGO 1: MJN (Selalu dari Assets)
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Image.asset(
+                          'assets/mjn-logo.png',
+                          height: 45,
+                          width: 45,
+                          errorBuilder: (c, e, s) => const Icon(Icons.flash_on,
+                              color: Colors.white, size: 40),
+                        ),
+                      ),
+
+                      const SizedBox(width: 15), // Jarak antara logo dan teks
+
+                      // GRUP TEKS (MULTIPOS & Slogan)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "MULTIPOS",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize:
+                                    34, // Sedikit disesuaikan agar pas dengan logo
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 2.0,
+                                height: 1.1,
+                              ),
+                            ),
+                            Text(
+                              "Smart Solutions for Modern Trade",
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontSize:
+                                    14, // Ukuran font sub-judul lebih proporsional
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 6),
+                        // Container(
+                        //   height: 4,
+                        //   width: 10,
+                        //   decoration: BoxDecoration(
+                        //     color: Colors.white.withOpacity(0.4),
+                        //     borderRadius: BorderRadius.circular(10),
+                        //   ),
+                        // ),
+                        Text(
+                          "Make every transaction effortless.",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 18,
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w300,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  SizedBox(height: isTablet ? 40 : 140),
+                  Align(
+                    alignment:
+                        isTablet ? Alignment.center : Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: 500,
+                      ),
+                      child: Container(
+                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 20),
+                            horizontal: 20, vertical: 30),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
+                          // Agar isi di dalam card tetap konsisten rata kiri
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Status SubDevice
                             if (_savedSubDevice.isNotEmpty) ...[
-                              const SizedBox(height: 10),
                               Text(
-                                "$_savedSubDevice",
+                                _savedSubDevice,
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.green,
                                 ),
                               ),
+                              const SizedBox(height: 8),
                             ],
 
-                            // User ID Field
+                            // INPUT USER ID
                             TextField(
                               controller: _userIdController,
-                              style: const TextStyle(fontSize: 13.5),
                               decoration: InputDecoration(
-                                labelText: 'User ID',
-                                labelStyle: TextStyle(
-                                    color: Theme.of(context).primaryColor,
-                                    fontSize: 13),
-                                prefixIcon: Icon(Icons.person,
-                                    color: Theme.of(context).primaryColor),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 12),
+                                hintText: 'User ID',
+                                prefixIcon: Icon(Icons.person_outline,
+                                    color: primaryColor),
+                                filled: true,
+                                fillColor: Colors.grey[100],
                                 border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 1.5),
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
 
-                            // Password Field
+                            // INPUT PASSWORD
                             TextField(
                               controller: _passwordController,
                               obscureText: true,
-                              style: const TextStyle(fontSize: 13.5),
                               decoration: InputDecoration(
-                                labelText: 'Password',
-                                labelStyle: TextStyle(
-                                    color: Theme.of(context).primaryColor,
-                                    fontSize: 13),
-                                prefixIcon: Icon(Icons.lock,
-                                    color: Theme.of(context).primaryColor),
-                                contentPadding: const EdgeInsets.symmetric(
-                                    vertical: 10, horizontal: 12),
+                                hintText: 'Password',
+                                prefixIcon: Icon(Icons.lock_outline,
+                                    color: primaryColor),
+                                filled: true,
+                                fillColor: Colors.grey[100],
                                 border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(10)),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(
-                                      color: Theme.of(context).primaryColor,
-                                      width: 1.5),
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide.none,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 18),
 
-                            // Login Button
+                            const SizedBox(height: 25),
+
+                            // TOMBOL LOGIN
                             SizedBox(
                               width: double.infinity,
-                              child: ElevatedButton.icon(
-                                icon: const Icon(Icons.login, size: 18),
-                                label: const Text(
-                                  "Login",
-                                  style: TextStyle(fontSize: 14.5),
-                                ),
+                              height: 55,
+                              child: ElevatedButton(
                                 onPressed: _checkNetworkAndLogin,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      Theme.of(context).primaryColor,
+                                  backgroundColor: primaryColor,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 12),
+                                  elevation: 0,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(15),
                                   ),
+                                ),
+                                child: const Text(
+                                  "Login",
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ),
@@ -567,11 +799,54 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+
+                  SizedBox(
+                      height: isTablet
+                          ? 20
+                          : 50), // Jarak yang cukup agar tampilan "napas"
+
+                  // --- FOOTER SECTION ---
+                  SizedBox(height: isTablet ? 40 : 20),
+
+                  // --- FOOTER SECTION ---
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Garis halus pembatas
+
+                        Text(
+                          "© 2024 MULTIPOS",
+                          style: TextStyle(
+                            // Tips: Gunakan putih jika background gelap, hitam jika terang
+                            color: Colors.black.withOpacity(0.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        Text(
+                          "Powered by MJM Digital Solution. All rights reserved.",
+                          style: TextStyle(
+                            color: Colors.black.withOpacity(0.5),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w300,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+
+                        SizedBox(height: 30 + bottomPadding),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

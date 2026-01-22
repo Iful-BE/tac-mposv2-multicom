@@ -30,10 +30,15 @@ class PaymentScreen extends StatefulWidget {
   final double svc;
   final double rounding;
   final double total;
+  final double totalQty;
+  final double pointUsed;
+  final double pointDiscount;
   final String voucherCode;
   final bool isSelfService;
+  final bool kurangiDariPoint;
   final String? antrianId;
   final List<Map<String, dynamic>> cartItems;
+  final Map<String, dynamic>? tempSales;
 
   const PaymentScreen(
       {super.key,
@@ -47,8 +52,13 @@ class PaymentScreen extends StatefulWidget {
       required this.svc,
       required this.rounding,
       required this.total,
+      required this.totalQty,
+      required this.pointUsed,
+      required this.pointDiscount,
       required this.voucherCode,
       required this.cartItems,
+      required this.tempSales,
+      required this.kurangiDariPoint,
       this.isSelfService = false,
       this.antrianId});
 
@@ -105,6 +115,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool hasNonCashPayment = false;
   double get paid => payments.fold(0.0, (p, c) => p + (c["amount"] ?? 0.0));
   double get remaining => totalAmount - paid;
+  bool isRegisterMember = false;
 
   @override
   void initState() {
@@ -144,6 +155,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     if (phone != null) waNumberController.text = phone;
     if (name != null) namaController.text = name;
+    bool savedMemberStatus = prefs.getBool('is_register_member') ?? false;
+    setState(() {
+      if (phone != null) waNumberController.text = phone;
+      isRegisterMember = savedMemberStatus;
+    });
+
+    if (widget.tempSales != null && widget.tempSales!['dp'] != null) {
+      double dpAmount =
+          double.tryParse(widget.tempSales!['dp'].toString()) ?? 0;
+      if (dpAmount > 0) {
+        payments.add({
+          'method': widget.tempSales!['paytype'] ?? 'CASH',
+          'amount': dpAmount,
+          'is_dp': true,
+          'origin': 'member',
+        });
+      }
+    }
+  }
+
+  Future<void> _saveMemberStatus(bool status, String phone) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (status) {
+      await prefs.setBool('is_register_member', true);
+      // debugPrint("Data Member Disimpan");
+    } else {
+      await prefs.remove('is_register_member');
+      // debugPrint("Data Member Dihapus dari Local");
+    }
   }
 
   Future<void> _loadSavedPrinter() async {
@@ -1093,8 +1133,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         return;
       }
     }
-
-    // Jika valid, lanjutkan pembayaran dan cetak nota
     _payAndPrintBill();
   }
 
@@ -1102,8 +1140,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final prefs = await SharedPreferences.getInstance();
     final after = prefs.getBool('after_transaction') ?? false;
     final phone = prefs.getString('user_phone');
-
-    // ✅ Tampilkan loading (kunci UI full stack)
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -1114,7 +1150,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       await checkOut();
       final hasPhone = phone != null && phone.isNotEmpty && phone != '0';
-      if (hasPhone) {
+
+      if (hasPhone && widget.typePayment != 300) {
         await showMemberPointDialog(context, after);
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1273,6 +1310,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'sub_total': widget.subtotal,
           'discount': widget.discount,
           'total': widget.total,
+          'total_qty': widget.totalQty,
           'tax': widget.tax,
           'svc': widget.svc,
           'rounding': widget.rounding,
@@ -1289,6 +1327,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'voucher_code': widget.voucherCode,
           'antrian': antrianId,
           'send_wa': sendWa ? true : false,
+          'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+          'point_discount': widget.kurangiDariPoint ? widget.pointDiscount : 0,
+          'tempSales': widget.tempSales,
         };
       } else if (widget.typePayment == 2) {
         if (selectedPaymentMethod != "QRIS") {
@@ -1299,6 +1340,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             "sub_total": widget.subtotal,
             "discount": widget.discount,
             "total": widget.total,
+            'total_qty': widget.totalQty,
             "tax": widget.tax,
             'svc': widget.svc,
             'rounding': widget.rounding,
@@ -1323,6 +1365,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             'voucher_code': widget.voucherCode,
             'antrian': antrianId,
             'send_wa': sendWa ? true : false,
+            'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+            'point_discount':
+                widget.kurangiDariPoint ? widget.pointDiscount : 0,
+            'tempSales': widget.tempSales,
           };
         } else if (selectedPaymentMethod == "QRIS") {
           body = {
@@ -1332,6 +1378,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             "sub_total": widget.subtotal,
             "discount": widget.discount,
             "total": widget.total,
+            'total_qty': widget.totalQty,
             "tax": widget.tax,
             'svc': widget.svc,
             'rounding': widget.rounding,
@@ -1355,6 +1402,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             'voucher_code': widget.voucherCode,
             'antrian': antrianId,
             'send_wa': sendWa ? true : false,
+            'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+            'point_discount':
+                widget.kurangiDariPoint ? widget.pointDiscount : 0,
+            'tempSales': widget.tempSales,
           };
         }
       } else if (widget.typePayment == 4) {
@@ -1373,6 +1424,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           "sub_total": widget.subtotal,
           "discount": widget.discount,
           "total": widget.total,
+          'total_qty': widget.totalQty,
           "tax": widget.tax,
           'svc': widget.svc,
           'rounding': widget.rounding,
@@ -1398,6 +1450,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'antrian': antrianId,
           'send_wa': sendWa ? true : false,
           "split_payments": splitData,
+          'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+          'point_discount': widget.kurangiDariPoint ? widget.pointDiscount : 0,
+          'tempSales': widget.tempSales,
         };
       } else if (widget.typePayment == 3) {
         body = {
@@ -1407,6 +1462,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'sub_total': widget.subtotal,
           'discount': widget.discount,
           'total': widget.total,
+          'total_qty': widget.totalQty,
           'tax': widget.tax,
           'svc': widget.svc,
           'rounding': widget.rounding,
@@ -1427,6 +1483,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'voucher_code': widget.voucherCode,
           'antrian': antrianId,
           'send_wa': sendWa ? true : false,
+          'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+          'point_discount': widget.kurangiDariPoint ? widget.pointDiscount : 0,
+          'tempSales': widget.tempSales,
         };
       } else if (widget.typePayment == 300) {
         body = {
@@ -1436,6 +1495,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'sub_total': widget.subtotal,
           'discount': widget.discount,
           'total': widget.total,
+          'total_qty': widget.totalQty,
           'tax': widget.tax,
           'svc': widget.svc,
           'rounding': widget.rounding,
@@ -1455,6 +1515,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
           'voucher_code': widget.voucherCode,
           'antrian': antrianId,
           'send_wa': sendWa ? true : false,
+          'point_used': widget.kurangiDariPoint ? widget.pointUsed : 0,
+          'point_discount': widget.kurangiDariPoint ? widget.pointDiscount : 0,
+          'tempSales': widget.tempSales,
         };
       }
 
@@ -2349,6 +2412,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       // =================================
                       ...payments.map((p) {
                         bool isDP = p['is_dp'] == true;
+                        bool isLocked = p['origin'] == 'member';
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -2368,9 +2432,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ==========================================
-                              // AREA TEKS (dibungkus Expanded)
-                              // ==========================================
                               Expanded(
                                 child: Wrap(
                                   spacing: 6,
@@ -2405,28 +2466,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                   ],
                                 ),
                               ),
+                              isLocked
+                                  ? Padding(
+                                      padding: const EdgeInsets.all(8.0),
+                                      child: Icon(Icons.lock,
+                                          size: 20,
+                                          color: Colors.grey.shade400),
+                                    )
+                                  : IconButton(
+                                      icon: Icon(Icons.delete,
+                                          color: Colors.red.shade400),
+                                      onPressed: () {
+                                        if (p['method'] == "Cash")
+                                          hasCashPayment = false;
+                                        if (p['method'] != "Cash")
+                                          hasNonCashPayment = false;
 
-                              // ==========================================
-                              // DELETE BUTTON
-                              // ==========================================
-                              IconButton(
-                                icon: Icon(Icons.delete,
-                                    color: Colors.red.shade400),
-                                onPressed: () {
-                                  if (p['method'] == "Cash")
-                                    hasCashPayment = false;
-                                  if (p['method'] != "Cash")
-                                    hasNonCashPayment = false;
-
-                                  payments.remove(p);
-                                  setState(() {});
-                                },
-                              ),
+                                        payments.remove(p);
+                                        setState(() {});
+                                      },
+                                    ),
                             ],
                           ),
                         );
                       }),
-
                       // =================================
                       // TOTAL
                       // =================================
@@ -2456,6 +2519,77 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               vertical: 10, horizontal: 12),
                           isDense: true, // memperkecil tinggi field
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text("Struk via WhatsApp"),
+                        value: sendWa,
+                        onChanged: (value) {
+                          setState(() {
+                            sendWa = value;
+                          });
+                        },
+                        activeColor: Theme.of(context).primaryColor,
+                      ),
+                      const SizedBox(height: 5),
+                      _buildReadonlyField(
+                        "No. WhatsApp",
+                        "+62 ${waNumberController.text}",
+                      ),
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: _buildReadonlyField(
+                                "Nama",
+                                namaController.text.isNotEmpty
+                                    ? namaController.text.toUpperCase()
+                                    : "-"),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: ValueListenableBuilder<TextEditingValue>(
+                              valueListenable: waNumberController,
+                              builder: (context, value, child) {
+                                bool isValid = value.text.length >= 9;
+                                return Container(
+                                  height: 55,
+                                  margin: const EdgeInsets.only(bottom: 4),
+                                  child: Center(
+                                    // Menjaga Switch tetap di tengah secara vertikal
+                                    child: SwitchListTile(
+                                      contentPadding: const EdgeInsets.only(
+                                          left: 12, right: 4),
+                                      title: Text(
+                                        "Aktifkan untuk menjadi member.",
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: isValid
+                                              ? Colors.green[800]
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                      value: isValid ? isRegisterMember : false,
+                                      activeColor: Colors.green,
+                                      onChanged: isValid
+                                          ? (bool newValue) {
+                                              setState(() {
+                                                isRegisterMember = newValue;
+                                              });
+                                              _saveMemberStatus(
+                                                  newValue, value.text);
+                                            }
+                                          : null,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -2538,7 +2672,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 Text(
                   "Kembali: ${currencyFormatter.format(change)}",
                   style: const TextStyle(
@@ -2558,17 +2692,64 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   },
                   activeColor: Theme.of(context).primaryColor,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 _buildReadonlyField(
                   "No. WhatsApp",
                   "+62 ${waNumberController.text}",
                 ),
-                const SizedBox(height: 10),
-                _buildReadonlyField(
-                  "Nama",
-                  namaController.text.isNotEmpty
-                      ? namaController.text.toUpperCase()
-                      : "-",
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _buildReadonlyField(
+                          "Nama",
+                          namaController.text.isNotEmpty
+                              ? namaController.text.toUpperCase()
+                              : "-"),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: waNumberController,
+                        builder: (context, value, child) {
+                          bool isValid = value.text.length >= 9;
+                          return Container(
+                            height: 55,
+                            margin: const EdgeInsets.only(bottom: 4),
+                            child: Center(
+                              // Menjaga Switch tetap di tengah secara vertikal
+                              child: SwitchListTile(
+                                contentPadding:
+                                    const EdgeInsets.only(left: 12, right: 4),
+                                title: Text(
+                                  "Aktifkan untuk menjadi member.",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isValid
+                                        ? Colors.green[800]
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                value: isValid ? isRegisterMember : false,
+                                activeColor: Colors.green,
+                                onChanged: isValid
+                                    ? (bool newValue) {
+                                        setState(() {
+                                          isRegisterMember = newValue;
+                                        });
+                                        // Memanggil fungsi hapus/simpan di atas
+                                        _saveMemberStatus(newValue, value.text);
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ]
 
@@ -2674,15 +2855,65 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   },
                   activeColor: Theme.of(context).primaryColor,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 5),
                 _buildReadonlyField(
-                    "No. WhatsApp", "+62 ${waNumberController.text}"),
-                const SizedBox(height: 10),
-                _buildReadonlyField(
-                    "Nama",
-                    namaController.text.isNotEmpty
-                        ? namaController.text.toUpperCase()
-                        : "-"),
+                  "No. WhatsApp",
+                  "+62 ${waNumberController.text}",
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: _buildReadonlyField(
+                          "Nama",
+                          namaController.text.isNotEmpty
+                              ? namaController.text.toUpperCase()
+                              : "-"),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: waNumberController,
+                        builder: (context, value, child) {
+                          bool isValid = value.text.length >= 9;
+                          return Container(
+                            height: 55,
+                            margin: const EdgeInsets.only(bottom: 4),
+                            child: Center(
+                              // Menjaga Switch tetap di tengah secara vertikal
+                              child: SwitchListTile(
+                                contentPadding:
+                                    const EdgeInsets.only(left: 12, right: 4),
+                                title: Text(
+                                  "Aktifkan untuk menjadi member.",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isValid
+                                        ? Colors.green[800]
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                value: isValid ? isRegisterMember : false,
+                                activeColor: Colors.green,
+                                onChanged: isValid
+                                    ? (bool newValue) {
+                                        setState(() {
+                                          isRegisterMember = newValue;
+                                        });
+                                        // Memanggil fungsi hapus/simpan di atas
+                                        _saveMemberStatus(newValue, value.text);
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ]
 
               //new compliment
