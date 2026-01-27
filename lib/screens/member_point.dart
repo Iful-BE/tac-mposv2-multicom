@@ -56,6 +56,7 @@ Future<Map<String, dynamic>?> _fetchCrmData() async {
     final domain = prefs.getString('domain');
     final nowa = prefs.getString('user_phone');
     final token = prefs.getString('token');
+    final branch = prefs.getString('sub_branch_name');
 
     if (domain == null || nowa == null || token == null) return null;
 
@@ -66,7 +67,7 @@ Future<Map<String, dynamic>?> _fetchCrmData() async {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({'nowa': nowa}),
+      body: jsonEncode({'nowa': nowa, 'sub_branch': branch}),
     );
 
     if (response.statusCode == 200) {

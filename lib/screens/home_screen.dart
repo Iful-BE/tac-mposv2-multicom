@@ -730,7 +730,7 @@ class _HomeScreenState extends State<HomeScreen> {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
-        body: jsonEncode({'phone': phone}),
+        body: jsonEncode({'phone': phone, 'sub_branch': branch}),
       );
 
       if (response.statusCode == 200) {
