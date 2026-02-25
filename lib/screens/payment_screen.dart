@@ -528,13 +528,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
         double grandTotal = double.parse(header['grand_total'].toString());
         double paid = double.parse(header['paid'].toString());
         double discount = double.parse(header['discount'].toString());
-        double kembali = paid - grandTotal;
+        int usePoint = int.parse(header['point'].toString());
+        double discPoint = double.parse(header['discount_point'].toString());
+        double kembali = (paid - grandTotal).clamp(0, double.infinity);
+        double grandTotal2 = grandTotal;
+        if (discPoint > 0) {
+          grandTotal2 = grandTotal + discPoint;
+        }
         // Cetak subtotal, pajak, total, dibayar, dan kembalian dengan format rupiah
         printer.printCustom("Subtotal  : ${formatRupiah(subTotal)}", 1, 0);
         printer.printCustom("Discount  : ${formatRupiah(discount)}", 1, 0);
         printer.printCustom("Srv Charge: ${formatRupiah(svc)}", 1, 0);
         printer.printCustom("PB1       : ${formatRupiah(tax)}", 1, 0);
         printer.printCustom("Rounded   : ${formatRupiah(rounding)}", 1, 0);
+        if (header['discount_point'] > 0 && header['point'] > 0) {
+          printer.printCustom("G.Total   : ${formatRupiah(grandTotal2)}", 1, 0);
+          printer.printCustom("Pts   Used: ${usePoint} pts", 1, 0);
+          printer.printCustom("Pts   Disc: ${formatRupiah(discPoint)}", 1, 0);
+        }
         printer.printCustom("Total     : ${formatRupiah(grandTotal)}", 1, 0);
         // SPLIT PAYMENT
         if (splitPayments != null &&
@@ -561,8 +572,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
             printer.printCustom("Payment   : Non CASH", 1, 0);
 
             if (header['type'].isNotEmpty) {
-              printer.printCustom("Tipe      : ${header['type']}", 1, 0);
-              printer.printCustom("Paid      : ${formatRupiah(paid)}", 1, 0);
+              printer.printCustom("Tipe    : ${header['type']}", 1, 0);
+              printer.printCustom("Paid    : ${formatRupiah(paid)}", 1, 0);
             }
           }
         }

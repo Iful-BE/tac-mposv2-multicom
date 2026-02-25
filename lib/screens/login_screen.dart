@@ -253,6 +253,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
+        //debugPrint(responseData.toString());
         if (responseData['status'] == 'success') {
           final sessionData = responseData['data'];
           await prefs.setString('user_id', sessionData['user_id']);
@@ -260,6 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.setString('role', sessionData['role']);
           await prefs.setString('cashier', sessionData['name']);
           await prefs.setString('token', sessionData['token']);
+          await prefs.setInt('skema', sessionData['skema']);
 
           if (!mounted) return;
           Navigator.pushReplacement(

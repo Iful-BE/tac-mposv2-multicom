@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 
 Future<bool?> showMemberPointDialog(BuildContext context, bool after) async {
   final data = await _fetchCrmData();
+  final prefs = await SharedPreferences.getInstance();
+  final skemaPoin = prefs.getInt('skema') ?? 0;
   //debugPrint("Isi data dari CRM: $data");
   if (data == null) {
     //debugPrint("Data null, dialog dibatalkan.");
@@ -25,7 +27,10 @@ Future<bool?> showMemberPointDialog(BuildContext context, bool after) async {
       return AlertDialog(
         // Bungkus dengan SingleChildScrollView agar tidak overflow di layar kecil
         content: SingleChildScrollView(
-          child: _MemberPointContent(data: data),
+          child: _MemberPointContent(
+            data: data,
+            skemaPoin: skemaPoin,
+          ),
         ),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
@@ -92,7 +97,11 @@ Future<bool?> afterTrx() async {
 /// 🔹 Widget isi dialog dengan data langsung ditampilkan
 class _MemberPointContent extends StatelessWidget {
   final Map<String, dynamic> data;
-  const _MemberPointContent({required this.data});
+  final int skemaPoin;
+  const _MemberPointContent({
+    required this.data,
+    required this.skemaPoin,
+  });
 
   String toTitleCase(String text) {
     if (text.isEmpty) return text;
@@ -132,11 +141,11 @@ class _MemberPointContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            "Total Point: $point",
+            "Total Points: $point",
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 12),
-          if (point == 10)
+          if (point == 10 && skemaPoin == 0) ...[
+            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -153,6 +162,7 @@ class _MemberPointContent extends StatelessWidget {
                 ),
               ),
             ),
+          ],
         ],
       ),
     );

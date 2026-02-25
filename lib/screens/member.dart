@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_custom_clippers/flutter_custom_clippers.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'sales_screen.dart';
@@ -13,11 +14,13 @@ class MemberScreen extends StatefulWidget {
   final String lastRedeem;
   final String redeemLoc;
   final int rewardsCount;
+  final Map<String, dynamic>? lastPts;
 
   const MemberScreen({
     super.key,
     required this.name,
     required this.trx,
+    this.lastPts,
     required this.point,
     required this.lastRedeem, // Tambahkan ini
     required this.redeemLoc, // Tambahkan ini
@@ -31,10 +34,49 @@ class MemberScreen extends StatefulWidget {
 class _MemberScreenState extends State<MemberScreen> {
   List<Map<String, dynamic>> topProducts = [];
 
+  int skemaPoin = 0;
+
   @override
   void initState() {
     super.initState();
+    _initData();
+  }
+
+  Future<void> _skema() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Ambil sebagai int. Jika gagal/null, beri nilai 0
+    int skema = prefs.getInt('skema') ?? 0;
+    if (skema == 0) {
+      String? skemaString = prefs.getString('skema');
+      if (skemaString != null) {
+        skema = int.tryParse(skemaString) ?? 0;
+      }
+    }
+
+    // debugPrint("Skema Poin (Integer): $skema");
+
+    if (mounted) {
+      setState(() {
+        skemaPoin = skema;
+      });
+    }
+  }
+
+  Future<void> _initData() async {
+    await _skema();
     _fetchCrmData();
+  }
+
+  String formatRupiah(dynamic amount) {
+    if (amount == null) return "Rp 0";
+    double value = double.tryParse(amount.toString()) ?? 0.0;
+
+    final format = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    return format.format(value);
   }
 
   String _getGreetingMessage() {
@@ -101,7 +143,7 @@ class _MemberScreenState extends State<MemberScreen> {
     try {
       final domain = await getDomainFromLocalStorage();
       final nowa = await getPhone();
-
+      final branch = await getBranchFromLocalStorage();
       final token = await getToken();
 
       if (domain == null || nowa == null) {
@@ -112,6 +154,7 @@ class _MemberScreenState extends State<MemberScreen> {
       final url = Uri.parse('$domain/api/crm-produk');
       final body = jsonEncode({
         'nowa': nowa,
+        'branch': branch,
       });
 
       final response = await http.post(
@@ -184,6 +227,31 @@ class _MemberScreenState extends State<MemberScreen> {
     );
   }
 
+  Widget _buildInfoRow2(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: Colors.grey.shade600),
+          const SizedBox(width: 8),
+          Text(
+            "$label:",
+            style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final greeting = _getGreetingMessage();
@@ -252,34 +320,116 @@ class _MemberScreenState extends State<MemberScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 8), // Jarak antar baris
+                        if (skemaPoin == 0) ...[
+                          const SizedBox(height: 8), // Jarak antar baris
+                          // BAGIAN DATA REDEEM (Data Baru)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                                left: 0), // Diperbaiki: Menggunakan .only
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 8),
+                                _buildInfoRow(
+                                  Icons.card_giftcard,
+                                  "Rewards Tersedia: ${widget.rewardsCount}",
+                                  textColor: Colors.green[
+                                      700], // Berikan warna hijau di sini
+                                ),
+                                // Baris Last Redeem (Tetap Abu-abu)
+                                _buildInfoRow(
+                                  Icons.history,
+                                  "Last Redeem: ${formatTanggalIndo(widget.lastRedeem)}", // Gunakan formatter di sini
+                                ),
 
-                        // BAGIAN DATA REDEEM (Data Baru)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                              left: 0), // Diperbaiki: Menggunakan .only
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 8),
-                              _buildInfoRow(
-                                Icons.card_giftcard,
-                                "Rewards Tersedia: ${widget.rewardsCount}",
-                                textColor: Colors
-                                    .green[700], // Berikan warna hijau di sini
-                              ),
-                              // Baris Last Redeem (Tetap Abu-abu)
-                              _buildInfoRow(
-                                Icons.history,
-                                "Last Redeem: ${formatTanggalIndo(widget.lastRedeem)}", // Gunakan formatter di sini
-                              ),
-
-                              _buildInfoRow(Icons.location_on_outlined,
-                                  "Lokasi: ${widget.redeemLoc.toUpperCase()}"),
-                              const SizedBox(height: 4),
-                            ],
+                                _buildInfoRow(Icons.location_on_outlined,
+                                    "Lokasi: ${widget.redeemLoc.toUpperCase()}"),
+                                const SizedBox(height: 4),
+                              ],
+                            ),
                           ),
-                        ),
+                        ] else if (skemaPoin == 1) ...[
+                          const SizedBox(height: 8),
+                          if (widget.lastPts != null)
+                            Card(
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(
+                                    color: Colors.green.shade100, width: 1),
+                              ),
+                              color: Colors.green.shade50.withOpacity(0.5),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.stars_rounded,
+                                                color: Colors.green.shade700),
+                                            const SizedBox(width: 8),
+                                            const Text(
+                                              "Point Terakhir Digunakan",
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade700,
+                                            borderRadius:
+                                                BorderRadius.circular(20),
+                                          ),
+                                          child: Text(
+                                            "+${widget.lastPts!['point']} pts",
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Divider(height: 24, thickness: 1),
+                                    _buildInfoRow2(
+                                        Icons.calendar_today_outlined,
+                                        "Tanggal",
+                                        formatTanggalIndo(
+                                            widget.lastPts!['date'])),
+                                    _buildInfoRow2(
+                                      Icons.confirmation_number_outlined,
+                                      "Diskon",
+                                      formatRupiah(widget.lastPts?['disc']),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(20.0),
+                                child: Text(
+                                  "Belum ada transaksi point",
+                                  style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic),
+                                ),
+                              ),
+                            ),
+                        ],
                         const SizedBox(height: 8),
                         const Text(
                           "Senang bisa bertemu denganmu lagi. Aku tau produk favoritmu.",

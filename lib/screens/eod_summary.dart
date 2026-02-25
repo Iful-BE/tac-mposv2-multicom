@@ -37,6 +37,8 @@ class BackendSummary {
   final double total;
   final double service;
   final double tax;
+  final double pointused;
+  final double pointdisc;
   final double rounding;
   final double grandTotal;
   final double guestspd;
@@ -53,6 +55,8 @@ class BackendSummary {
     required this.service,
     required this.tax,
     required this.rounding,
+    required this.pointused,
+    required this.pointdisc,
     required this.grandTotal,
     required this.guestspd,
     required this.qtyspd,
@@ -70,6 +74,8 @@ class BackendSummary {
       service: double.tryParse(json['service']?.toString() ?? '0') ?? 0,
       tax: double.tryParse(json['tax']?.toString() ?? '0') ?? 0,
       rounding: double.tryParse(json['rounding']?.toString() ?? '0') ?? 0,
+      pointused: double.tryParse(json['pointused']?.toString() ?? '0') ?? 0,
+      pointdisc: double.tryParse(json['pointdisc']?.toString() ?? '0') ?? 0,
       grandTotal: double.tryParse(json['grandTotal']?.toString() ?? '0') ?? 0,
       guestspd: double.tryParse(json['spending_guest']?.toString() ?? '0') ?? 0,
       qtyspd: double.tryParse(json['spending_qty']?.toString() ?? '0') ?? 0,
@@ -738,6 +744,12 @@ class _EodSummaryState extends State<EodSummary> {
 
     printer.printCustom("-" * f.paper, 1, 0);
     printer.printCustom(
+        lr("Point Used", formatRupiah(summary.pointused), f), 1, 0);
+    printer.printCustom(
+        lr("Point Disc", formatRupiah(summary.pointdisc), f), 1, 0);
+
+    printer.printCustom("-" * f.paper, 1, 0);
+    printer.printCustom(
         lr("GRAND TOTAL", formatRupiah(summary.grandTotal), f), 1, 0);
 
     // =========================
@@ -1272,6 +1284,9 @@ class _EodSummaryState extends State<EodSummary> {
           _row("Service", rupiah(s.service)),
           _row("Tax", rupiah(s.tax)),
           _row("Rounding", rupiah(s.rounding)),
+          const Divider(),
+          _row("Points Used", rupiah(s.pointused)),
+          _row("Points Disc", rupiah(s.pointdisc)),
           const Divider(),
           _row("Total Revenue", bold: true, rupiah(s.grandTotal)),
           if (items.isNotEmpty) ...[

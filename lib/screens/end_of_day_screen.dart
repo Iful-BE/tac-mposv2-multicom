@@ -266,6 +266,12 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
       double totalPayment =
           double.tryParse(receiptData['total_payment'].toString()) ?? 0;
 
+      double totalPointDisc =
+          double.tryParse(receiptData['total_point_disc'].toString()) ?? 0;
+
+      double totalPointUsed =
+          double.tryParse(receiptData['total_point_used'].toString()) ?? 0;
+
       Map<String, dynamic> combinedTotals =
           Map<String, dynamic>.from(receiptData['combinedTotals'] ?? {});
 
@@ -319,7 +325,7 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
       printer.printCustom(
           "Rounded      : ${formatRupiah(totalRounding)}", 1, 0);
       printer.printNewLine();
-      printer.printCustom("Grand Total : ${formatRupiah(grandTotal)}", 1, 0);
+      printer.printCustom("Grand Total  : ${formatRupiah(grandTotal)}", 1, 0);
       printer.printNewLine();
 
       normalTotals.forEach((type, amt) {
@@ -336,6 +342,9 @@ class _EndOfDayScreenState extends State<EndOfDayScreen> {
         printer.printCustom("$type : ${formatRupiah(amt)}", 1, 0);
       });
 
+      printer.printNewLine();
+      printer.printCustom("Points Used: $totalPointUsed", 1, 0);
+      printer.printCustom("Points Disc: ${formatRupiah(totalPointDisc)}", 1, 0);
       printer.printNewLine();
 
       sendRawCutCommand();

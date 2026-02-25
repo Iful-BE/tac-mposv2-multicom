@@ -2620,7 +2620,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   Text(
-                                    'Agent ID: ${tempSales!['agent_id']}',
+                                    'Agent: ${tempSales!['agent_id']}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                   Text(

@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? role;
   final TextEditingController phoneController = TextEditingController();
   bool isRegisterMember = false;
-
+  int skemaPoin = 0;
   bool _isPhoneValid() {
     return phoneController.text.length >= 9;
   }
@@ -64,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     Wakelock.enable();
     loadRole();
+    _skema();
     _loadSavedPrinter();
     _loadUserData();
     _loadLatestVersion();
@@ -101,6 +102,26 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _latestVersion = version;
+      });
+    }
+  }
+
+  Future<void> _skema() async {
+    final prefs = await SharedPreferences.getInstance();
+    // Ambil sebagai int. Jika gagal/null, beri nilai 0
+    int skema = prefs.getInt('skema') ?? 0;
+    if (skema == 0) {
+      String? skemaString = prefs.getString('skema');
+      if (skemaString != null) {
+        skema = int.tryParse(skemaString) ?? 0;
+      }
+    }
+
+    // debugPrint("Skema Poin (Integer): $skema");
+
+    if (mounted) {
+      setState(() {
+        skemaPoin = skema;
       });
     }
   }
@@ -735,16 +756,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        //print("API Response: $data");
+        // print("API Response: $data");
         if (data['data'] != null && data['data']['name'] != null) {
+          final int skema = int.tryParse(data['skema'].toString()) ?? 0;
+          final rawPoint = data['data']['total_point'] ?? 0;
+          final int currentPoint = int.tryParse(rawPoint.toString()) ?? 0;
+
           return {
             'status': true,
+            'skema': skema,
             'name': data['data']['name'],
             'trx': data['data']['trx'] ?? 0,
-            'total_point': (data['data']['total_point'] == 10)
-                ? 0
-                : (data['data']['total_point'] ?? 0),
-            // Tangkap data tambahan
+            'lastpts': data['lastpts'],
+            'total_point': skema == 0
+                ? (currentPoint == 10 ? 0 : currentPoint)
+                : currentPoint,
+            // Data reward
             'last_redeem': data['last_redeem_date'] ?? '-',
             'redeem_loc': data['last_redeem_loc'] ?? '-',
             'rewards_count': data['rewards_count'] ?? 0,
@@ -1058,6 +1085,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (result['status'] == true) {
         final name = result['name'] ?? '';
         await prefs.setString('customer_name', name);
+        final lastPts = result['lastpts'];
 
         Navigator.pushReplacement(
           context,
@@ -1065,6 +1093,7 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (_) => MemberScreen(
               name: name,
               trx: result['trx'],
+              lastPts: lastPts,
               point: result['total_point'],
               lastRedeem: result['last_redeem'],
               redeemLoc: result['redeem_loc'],
@@ -1096,13 +1125,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (result['status'] == true) {
         final name = result['name'] ?? '';
         await prefs.setString('customer_name', name);
-
+        final lastPts = result['lastpts'];
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => MemberScreen(
               name: name,
               trx: result['trx'],
+              lastPts: lastPts,
               point: result['total_point'],
               lastRedeem: result['last_redeem'], // Data dari API
               redeemLoc: result['redeem_loc'], // Data dari API
