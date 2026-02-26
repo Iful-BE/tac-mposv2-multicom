@@ -54,7 +54,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? role;
   final TextEditingController phoneController = TextEditingController();
   bool isRegisterMember = false;
+  Map<String, int> menuCount = {};
   int skemaPoin = 0;
+  int holdCount = 0;
   bool _isPhoneValid() {
     return phoneController.text.length >= 9;
   }
@@ -65,6 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Wakelock.enable();
     loadRole();
     _skema();
+    getMenuCount();
+    loadMenuCount();
     _loadSavedPrinter();
     _loadUserData();
     _loadLatestVersion();
@@ -83,6 +87,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  Future<void> loadMenuCount() async {
+    final result = await getMenuCount();
+
+    setState(() {
+      menuCount = result;
+    });
   }
 
   // Fungsi untuk mengambil data dari SharedPreferences
@@ -2536,36 +2548,127 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<Map<String, int>> getMenuCount() async {
+    final token = await getToken();
+
+    try {
+      final branch = await getBranchFromLocalStorage();
+      final domain = await getDomainFromLocalStorage();
+      final sessionId = await getSession();
+
+      if (branch == null || branch.isEmpty) {
+        throw Exception('Branch not found');
+      }
+
+      if (domain == null || domain.isEmpty) {
+        throw Exception('Domain not found');
+      }
+
+      final uri = Uri.parse('$domain/api/count-menu');
+
+      final response = await http.post(
+        uri,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'sub_branch': branch,
+          'session_id': sessionId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> json = jsonDecode(response.body);
+        // debugPrint("Menu Count: $json");
+        if (json['data'] != null) {
+          return {
+            'hold': json['data']['hold'] ?? 0,
+          };
+        }
+      }
+
+      return {};
+    } catch (e) {
+      debugPrint("Error fetching count menu: $e");
+      return {};
+    }
+  }
+
   Widget _buildMenuItem({
     required IconData icon,
     required String label,
     required Color color,
     required VoidCallback onTap,
+    int badgeCount = 0,
   }) {
     return InkWell(
-      // Menggunakan InkWell agar ada efek klik yang rapi
       onTap: onTap,
       borderRadius: BorderRadius.circular(15),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1), // Warna latar lembut
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(icon, size: 28, color: color),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Background Icon
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(icon, size: 28, color: color),
+              ),
+
+              // Modern Badge
+              if (badgeCount > 0)
+                Positioned(
+                  right: -6,
+                  top: -6,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.white,
+                          width: 2), // White border agar "pop"
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Center(
+                      child: Text(
+                        badgeCount > 99 ? '99+' : badgeCount.toString(),
+                        style: const TextStyle(
+                          color:
+                              Colors.white, // Putih lebih modern di atas merah
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Text(
             label,
             textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
               color: Colors.black87,
             ),
           ),
@@ -2790,10 +2893,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             icon: Icons.table_restaurant,
                             label: "Hold TRX",
                             color: Colors.orange,
-                            onTap: () => Navigator.push(
+                            badgeCount: menuCount['hold'] ?? 0,
+                            onTap: () async {
+                              await Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                    builder: (context) => TransactionQue())),
+                                  builder: (context) => TransactionQue(),
+                                ),
+                              );
+
+                              // Refresh setelah balik
+                              loadMenuCount();
+                            },
                           ),
                           _buildMenuItem(
                             icon: Icons.analytics,
