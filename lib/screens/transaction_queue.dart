@@ -535,20 +535,20 @@ class _TransactionScreenState extends State<TransactionQue> {
                               // print('localUserId = $localUserId');
                               // print('kasirId = $kasirId');
                               // print('mgTable = $mgTable');
-                              if (localUserId != kasirId && mgTable == false) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Antrian bisa diproses oleh user upselling',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.bold),
-                                    ),
-                                    backgroundColor: Colors.red,
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                                return;
-                              }
+                              // if (localUserId != kasirId && mgTable == false) {
+                              //   ScaffoldMessenger.of(context).showSnackBar(
+                              //     const SnackBar(
+                              //       content: Text(
+                              //         'Antrian bisa diproses oleh user upselling',
+                              //         style: TextStyle(
+                              //             fontWeight: FontWeight.bold),
+                              //       ),
+                              //       backgroundColor: Colors.red,
+                              //       duration: Duration(seconds: 2),
+                              //     ),
+                              //   );
+                              //   return;
+                              // }
 
                               await prefs.remove('customer_name');
                               await prefs.remove('user_phone');
