@@ -108,16 +108,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _skema() async {
     final prefs = await SharedPreferences.getInstance();
-    // Ambil sebagai int. Jika gagal/null, beri nilai 0
-    int skema = prefs.getInt('skema') ?? 0;
-    if (skema == 0) {
-      String? skemaString = prefs.getString('skema');
-      if (skemaString != null) {
-        skema = int.tryParse(skemaString) ?? 0;
-      }
-    }
 
-    // debugPrint("Skema Poin (Integer): $skema");
+    // Ambil langsung sebagai int
+    int skema = prefs.getInt('skema') ?? 0;
 
     if (mounted) {
       setState(() {
