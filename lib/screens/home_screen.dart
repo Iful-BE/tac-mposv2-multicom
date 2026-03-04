@@ -605,6 +605,11 @@ class _HomeScreenState extends State<HomeScreen> {
           double.tryParse(receiptData['grand_total'].toString()) ?? 0;
       double totalPayment =
           double.tryParse(receiptData['total_payment'].toString()) ?? 0;
+      double totalPointDisc =
+          double.tryParse(receiptData['total_point_disc'].toString()) ?? 0;
+
+      int totalPointUsed =
+          int.tryParse(receiptData['total_point_used'].toString()) ?? 0;
 
       Map<String, dynamic> combinedTotals =
           Map<String, dynamic>.from(receiptData['combinedTotals'] ?? {});
@@ -652,12 +657,31 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       printer.printCustom("Sub Total    : ${formatRupiah(subTotal)}", 1, 0);
-      printer.printCustom(
-          "Discount     : ${formatRupiah(totalDiscount)}", 1, 0);
-      printer.printCustom("PB1          : ${formatRupiah(totalTax)}", 1, 0);
-      printer.printCustom("S.Charge     : ${formatRupiah(totalService)}", 1, 0);
-      printer.printCustom(
-          "Rounded      : ${formatRupiah(totalRounding)}", 1, 0);
+      if (totalDiscount > 0) {
+        printer.printCustom(
+            "Discount     : ${formatRupiah(totalDiscount)}", 1, 0);
+      }
+
+      if (totalTax > 0) {
+        printer.printCustom("PB1          : ${formatRupiah(totalTax)}", 1, 0);
+      }
+
+      if (totalService > 0) {
+        printer.printCustom(
+            "S.Charge     : ${formatRupiah(totalService)}", 1, 0);
+      }
+      if (totalRounding > 0) {
+        printer.printCustom(
+            "Rounded      : ${formatRupiah(totalRounding)}", 1, 0);
+      }
+
+      if (totalPointUsed > 0) {
+        printer.printCustom("Pts Used     : $totalPointUsed", 1, 0);
+      }
+      if (totalPointDisc > 0) {
+        printer.printCustom(
+            "Pts Disc     : ${formatRupiah(totalPointDisc)}", 1, 0);
+      }
       printer.printNewLine();
       printer.printCustom("Grand Total : ${formatRupiah(grandTotal)}", 1, 0);
       printer.printNewLine();

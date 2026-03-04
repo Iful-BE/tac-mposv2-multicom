@@ -367,7 +367,7 @@ class _MemberScreenState extends State<MemberScreen> {
                                                 color: Colors.green.shade700),
                                             const SizedBox(width: 8),
                                             const Text(
-                                              "Point Terakhir Digunakan",
+                                              "Poin Terakhir Digunakan",
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,

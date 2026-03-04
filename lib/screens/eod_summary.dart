@@ -37,7 +37,7 @@ class BackendSummary {
   final double total;
   final double service;
   final double tax;
-  final double pointused;
+  final int pointused;
   final double pointdisc;
   final double rounding;
   final double grandTotal;
@@ -74,7 +74,7 @@ class BackendSummary {
       service: double.tryParse(json['service']?.toString() ?? '0') ?? 0,
       tax: double.tryParse(json['tax']?.toString() ?? '0') ?? 0,
       rounding: double.tryParse(json['rounding']?.toString() ?? '0') ?? 0,
-      pointused: double.tryParse(json['pointused']?.toString() ?? '0') ?? 0,
+      pointused: int.tryParse(json['pointused']?.toString() ?? '0') ?? 0,
       pointdisc: double.tryParse(json['pointdisc']?.toString() ?? '0') ?? 0,
       grandTotal: double.tryParse(json['grandTotal']?.toString() ?? '0') ?? 0,
       guestspd: double.tryParse(json['spending_guest']?.toString() ?? '0') ?? 0,
@@ -744,7 +744,7 @@ class _EodSummaryState extends State<EodSummary> {
 
     printer.printCustom("-" * f.paper, 1, 0);
     printer.printCustom(
-        lr("Point Used", formatRupiah(summary.pointused), f), 1, 0);
+        lr("Point Used", summary.pointused.toString(), f), 1, 0);
     printer.printCustom(
         lr("Point Disc", formatRupiah(summary.pointdisc), f), 1, 0);
 
@@ -1285,7 +1285,7 @@ class _EodSummaryState extends State<EodSummary> {
           _row("Tax", rupiah(s.tax)),
           _row("Rounding", rupiah(s.rounding)),
           const Divider(),
-          _row("Points Used", rupiah(s.pointused)),
+          _row("Points Used", s.pointused.toString()),
           _row("Points Disc", rupiah(s.pointdisc)),
           const Divider(),
           _row("Total Revenue", bold: true, rupiah(s.grandTotal)),
