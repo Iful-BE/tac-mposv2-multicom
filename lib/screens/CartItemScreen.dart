@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:get/get_navigation/get_navigation.dart';
+
 import 'package:intl/intl.dart';
 import 'package:mposv2/screens/home_screen.dart';
 import 'package:mposv2/screens/login_screen.dart';
 import 'package:mposv2/screens/payment_screen.dart';
-import 'package:mposv2/screens/sales_screen.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import 'package:flutter/material.dart';
@@ -69,13 +69,15 @@ class _CartItemScreenState extends State<CartItemScreen> {
   double gt = 0;
   double rounding = 0;
   String voucherCode = '';
-  String _orderType = '';
+  String orderType2 = '';
   double splitTotal = 0;
   String? inputNote;
   String variantString = '';
   bool isSplitMode = true;
   List<Map<String, dynamic>> splitItems = [];
   Map<String, dynamic>? tempSales;
+  bool isExpanded = false;
+  bool isExpandedTablet = true;
 
   String? role;
 
@@ -218,7 +220,7 @@ class _CartItemScreenState extends State<CartItemScreen> {
   Future<void> _loadOrderType() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _orderType = prefs.getString('orderType')?.toLowerCase() ?? 'dine in';
+      orderType2 = prefs.getString('orderType')?.toLowerCase() ?? 'dine in';
     });
   }
 
@@ -1431,18 +1433,42 @@ class _CartItemScreenState extends State<CartItemScreen> {
     String label,
     String? value, {
     Widget? valueWidget,
-    VoidCallback? onDelete,
+    Color? color, // Tambahkan parameter ini
+    VoidCallback? onDelete, // Tambahkan parameter ini
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(
+          vertical: 4), // Sedikit diperlebar agar tidak sesak
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13)),
+          // Bagian Label & Tombol Hapus
+          Row(
+            children: [
+              if (onDelete != null) ...[
+                GestureDetector(
+                  onTap: onDelete,
+                  child: const Icon(Icons.remove_circle,
+                      size: 18, color: Colors.red),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Text(label,
+                  style: const TextStyle(fontSize: 13, color: Colors.black87)),
+            ],
+          ),
+
+          // Bagian Value (Nilai)
           valueWidget ??
               Text(
                 value ?? '',
-                style: const TextStyle(fontSize: 13),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color ??
+                      Colors
+                          .black87, // Jika color diisi, pakai color. Jika tidak, pakai hitam.
+                ),
               ),
         ],
       ),
@@ -1539,13 +1565,22 @@ class _CartItemScreenState extends State<CartItemScreen> {
         "antrian_id": widget.antrianId,
         "target_table": targetTable,
         "items": splitItems.map((item) {
-          return {
-            "id": item['id'],
-            "qty": item['quantity'],
-            "price": item['price']
-          };
+          return {"id": item['id'], "qty": item['qty'], "price": item['price']};
         }).toList(),
       };
+
+      // debugPrint("DEBUG BODY SPLIT:");
+      // debugPrint(jsonEncode(body));
+      // debugPrint("===== DEBUG SPLIT ITEMS =====");
+
+      // for (var item in splitItems) {
+      //   debugPrint(
+      //     "ID: ${item['id']} | QTY CART: ${item['qty']} | SPLIT QTY: ${item['splitQty']} | PRICE: ${item['price']}",
+      //   );
+      // }
+
+      // debugPrint("=============================");
+      // return;
 
       final response = await http.post(
         uri,
@@ -1605,7 +1640,6 @@ class _CartItemScreenState extends State<CartItemScreen> {
       final areas = Map<String, dynamic>.from(data['areas'] ?? {});
       List<Map<String, dynamic>> allEmptyTables = [];
 
-      // 🔥 Pastikan nomor meja disimpan sebagai INT
       areas.forEach((areaName, tables) {
         for (var t in tables) {
           if (t['occupied'] == false) {
@@ -1975,6 +2009,88 @@ class _CartItemScreenState extends State<CartItemScreen> {
     }
   }
 
+// Widget untuk tombol plus minus yang compact
+  Widget _buildQtyBtn(
+      {required IconData icon,
+      required VoidCallback onTap,
+      bool enabled = true}) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.all(6.0),
+        child: Icon(icon,
+            size: 18, color: enabled ? Colors.blueAccent : Colors.grey),
+      ),
+    );
+  }
+
+// Logika update quantity dan splitTotal
+  void _updateQty(Map item, int delta) {
+    final double price = item['price']?.toDouble() ?? 0;
+
+    setState(() {
+      item['splitQty'] += delta;
+      splitTotal += (price * delta);
+
+      // Update di list splitItems
+      int index = splitItems.indexWhere((e) => e['id'] == item['id']);
+      if (index != -1) {
+        splitItems[index]['qty'] = item['splitQty'];
+      }
+    });
+  }
+
+// Logika Checkbox (Tambah/Hapus dari list)
+  void _handleSplitLogic(Map item, bool isAdded) {
+    final double price = item['price']?.toDouble() ?? 0;
+    final int qty = item['splitQty'];
+    int index = splitItems.indexWhere((e) => e['id'] == item['id']);
+
+    if (isAdded) {
+      if (index == -1) {
+        splitItems.add({"id": item['id'], "price": price, "qty": qty});
+        splitTotal += (price * qty);
+      }
+    } else {
+      if (index != -1) {
+        splitTotal -= (price * splitItems[index]['qty']);
+        splitItems.removeAt(index);
+        if (splitTotal < 0) splitTotal = 0;
+      }
+    }
+  }
+
+  Widget _qtyActionBtn(
+      {required IconData icon,
+      required VoidCallback onTap,
+      bool enabled = true}) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      child:
+          Icon(icon, size: 16, color: enabled ? Colors.blue : Colors.grey[400]),
+    );
+  }
+
+  Widget _buildInfoText(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text('$label: ',
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black54)),
+          Expanded(
+            child: Text('${value ?? '-'}',
+                style: const TextStyle(fontSize: 12, color: Colors.black87)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     Timer? debounce;
@@ -2135,42 +2251,114 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                                   builder: (context,
                                                       isSplitMode, _) {
                                                     if (!isSplitMode)
-                                                      return SizedBox();
+                                                      return const SizedBox();
 
-                                                    return Checkbox(
-                                                      value: item['isSplit'] ??
-                                                          false,
-                                                      onChanged: (val) {
-                                                        setState(() {
-                                                          item['isSplit'] =
-                                                              val ?? false;
+                                                    item['splitQty'] ??= 1;
+                                                    bool isSelected =
+                                                        item['isSplit'] ??
+                                                            false;
 
-                                                          final double price =
-                                                              item['price']
-                                                                      ?.toDouble() ??
-                                                                  0;
-                                                          final int qty = item[
-                                                                  'quantity'] ??
-                                                              1;
-                                                          final double
-                                                              itemTotal =
-                                                              price * qty;
+                                                    return AnimatedSize(
+                                                      duration: const Duration(
+                                                          milliseconds: 200),
+                                                      curve: Curves.easeInOut,
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize
+                                                            .min, // Mengikuti lebar konten
+                                                        children: [
+                                                          // Checkbox yang lebih rapat
+                                                          SizedBox(
+                                                            width:
+                                                                32, // Membatasi lebar checkbox agar tidak boros tempat
+                                                            child: Checkbox(
+                                                              value: isSelected,
+                                                              visualDensity:
+                                                                  VisualDensity
+                                                                      .compact,
+                                                              onChanged: (val) {
+                                                                setState(() {
+                                                                  item['isSplit'] =
+                                                                      val ??
+                                                                          false;
+                                                                  _handleSplitLogic(
+                                                                      item,
+                                                                      val ??
+                                                                          false);
+                                                                });
+                                                              },
+                                                            ),
+                                                          ),
 
-                                                          if (val == true) {
-                                                            splitItems
-                                                                .add(item);
-                                                            splitTotal +=
-                                                                itemTotal;
-                                                          } else {
-                                                            splitItems
-                                                                .remove(item);
-                                                            splitTotal -=
-                                                                itemTotal;
-                                                            if (splitTotal < 0)
-                                                              splitTotal = 0;
-                                                          }
-                                                        });
-                                                      },
+                                                          // Hanya makan tempat kalau isSelected = true
+                                                          if (isSelected) ...[
+                                                            const SizedBox(
+                                                                width: 4),
+                                                            Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          4,
+                                                                      vertical:
+                                                                          2),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: Colors
+                                                                    .blueGrey[50],
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            6),
+                                                                border: Border.all(
+                                                                    color: Colors
+                                                                            .blueGrey[
+                                                                        100]!),
+                                                              ),
+                                                              child: Row(
+                                                                children: [
+                                                                  _qtyActionBtn(
+                                                                    icon: Icons
+                                                                        .remove,
+                                                                    onTap: () =>
+                                                                        _updateQty(
+                                                                            item,
+                                                                            -1),
+                                                                    enabled:
+                                                                        item['splitQty'] >
+                                                                            1,
+                                                                  ),
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            6),
+                                                                    child: Text(
+                                                                      "${item['splitQty']}/${item['quantity']}",
+                                                                      style: const TextStyle(
+                                                                          fontSize:
+                                                                              12,
+                                                                          fontWeight:
+                                                                              FontWeight.w600),
+                                                                    ),
+                                                                  ),
+                                                                  _qtyActionBtn(
+                                                                    icon: Icons
+                                                                        .add,
+                                                                    onTap: () =>
+                                                                        _updateQty(
+                                                                            item,
+                                                                            1),
+                                                                    enabled: item[
+                                                                            'splitQty'] <
+                                                                        item[
+                                                                            'quantity'],
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ],
+                                                      ),
                                                     );
                                                   },
                                                 ),
@@ -2440,215 +2628,207 @@ class _CartItemScreenState extends State<CartItemScreen> {
                               ],
                             ),
                             child: Column(
+                              // Menggunakan Column utama sebagai layout dasar
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    // Tombol search voucher
                                     IconButton(
-                                      icon: Icon(Icons.search,
+                                      icon: Icon(
+                                          Icons.confirmation_number_outlined,
                                           color:
                                               Theme.of(context).primaryColor),
                                       onPressed: () async {
-                                        await fetchVoucher(); // ambil dari API
-                                        await showVoucherDialog(); // tampilkan popup
+                                        await fetchVoucher();
+                                        await showVoucherDialog();
                                       },
                                     ),
                                     const SizedBox(width: 4),
-
-                                    // TextField voucher
                                     Expanded(
-                                      child: Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 8),
-                                        child: TextField(
-                                          controller: _voucherController,
-                                          readOnly:
-                                              true, // user tidak bisa mengetik
-                                          style: const TextStyle(fontSize: 13),
-                                          decoration: const InputDecoration(
-                                            hintText:
-                                                'Voucher code klik icon cari',
-                                            isDense: true,
-                                            contentPadding:
-                                                EdgeInsets.symmetric(
-                                                    horizontal: 8,
-                                                    vertical: 10),
-                                            border: OutlineInputBorder(),
+                                      child: TextField(
+                                        controller: _voucherController,
+                                        readOnly: true,
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold),
+                                        decoration: InputDecoration(
+                                          hintText: 'Pilih Voucher',
+                                          isDense: true,
+                                          filled: true,
+                                          fillColor: Colors.grey[50],
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                                  horizontal: 12, vertical: 12),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: BorderSide(
+                                                color: Colors.grey[300]!),
                                           ),
                                         ),
                                       ),
                                     ),
-
-                                    const SizedBox(width: 8),
-
-                                    // Tombol gunakan voucher
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        color: Colors.red,
-                                        size: 24,
-                                      ),
-                                      tooltip: 'Hapus Voucher',
-                                      onPressed: () async {
-                                        try {
+                                    if (_voucherController.text.isNotEmpty)
+                                      IconButton(
+                                        icon: const Icon(Icons.cancel,
+                                            color: Colors.redAccent),
+                                        onPressed: () async {
                                           _voucherController.clear();
                                           voucherCode = "";
-
-                                          await getDiscount(); // backend reset diskon
-
+                                          await getDiscount();
                                           setState(() {});
-                                        } catch (e) {
-                                          print(e);
-                                        }
-                                      },
+                                        },
+                                      ),
+                                    IconButton(
+                                      icon: Icon(
+                                        isExpandedTablet
+                                            ? Icons.keyboard_arrow_up
+                                            : Icons.keyboard_arrow_down,
+                                        color: Colors.grey[600],
+                                      ),
+                                      onPressed: () => setState(() =>
+                                          isExpandedTablet = !isExpandedTablet),
                                     ),
                                   ],
                                 ),
+
                                 const SizedBox(height: 10),
-                                if (skemaMember == 1 && isMember) ...[
-                                  _buildRow(
-                                    context,
-                                    'Poin:',
-                                    null,
-                                    valueWidget: Text(
-                                      '${point.toInt()} pts',
-                                      style: const TextStyle(
-                                        color: Colors.green,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                // SECTION 2: AREA SCROLLABLE (DETAIL BIAYA)
+                                Expanded(
+                                  // Menggunakan Expanded agar area scroll mengambil sisa ruang yang ada
+                                  child: SingleChildScrollView(
+                                    physics: const BouncingScrollPhysics(),
+                                    child: Column(
+                                      children: [
+                                        _buildRow(context, 'Subtotal:',
+                                            formatRupiah(subtotal)),
+                                        _buildRow(context, 'Diskon (-)',
+                                            formatRupiah(discount),
+                                            color: Colors.red),
+                                        _buildRow(context, 'Total:',
+                                            formatRupiah(total)),
+                                        const Divider(thickness: 1),
+
+                                        _buildRow(
+                                            context,
+                                            'Service Charge $formattedSvc% (+):',
+                                            formatRupiah(
+                                                isServiceEnabled ? svc1 : 0)),
+                                        _buildRow(
+                                            context,
+                                            'PB1 $formattedTax% (+):',
+                                            formatRupiah(
+                                                isTaxEnabled ? tax1 : 0)),
+                                        _buildRow(context, 'Rounding (+):',
+                                            formatRupiah(rounding)),
+
+                                        // Member Poin Section
+                                        if (skemaMember == 1 && isMember) ...[
+                                          const Divider(thickness: 1),
+                                          _buildRow(context, 'Poin:', null,
+                                              valueWidget: Text(
+                                                  '${point.toInt()} pts',
+                                                  style: const TextStyle(
+                                                      color: Colors.green,
+                                                      fontWeight:
+                                                          FontWeight.bold))),
+                                          _buildRow(context, 'Nominal @1 Poin:',
+                                              formatRupiah(nominalPoint)),
+                                          _buildRow(context, 'Disc Poin:',
+                                              formatRupiah(discPoint)),
+                                          Row(
+                                            children: [
+                                              Checkbox(
+                                                value: kurangiDariPoint,
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    kurangiDariPoint =
+                                                        value ?? false;
+                                                    calculateTotals();
+                                                  });
+                                                },
+                                              ),
+                                              const Text('Gunakan poin',
+                                                  style:
+                                                      TextStyle(fontSize: 13)),
+                                            ],
+                                          ),
+                                        ],
+
+                                        // Expanded Sales Info
+                                        if (isExpandedTablet &&
+                                            tempSales != null &&
+                                            skemaMember == 1) ...[
+                                          const Divider(
+                                              thickness: 1, height: 20),
+                                          Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[50],
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                  color: Colors.grey[200]!),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                _buildInfoText('Sales ID',
+                                                    tempSales!['sales_id']),
+                                                _buildInfoText('Agent',
+                                                    tempSales!['agent_id']),
+                                                _buildInfoText('PIC',
+                                                    tempSales!['agent_pic']),
+                                                _buildInfoText('Customer',
+                                                    tempSales!['name']),
+                                                _buildInfoText('Payment',
+                                                    tempSales!['paytype']),
+                                                const Divider(height: 15),
+                                                _buildRow(
+                                                    context,
+                                                    'DP:',
+                                                    formatRupiah(double.tryParse(
+                                                            tempSales!['dp']
+                                                                .toString()) ??
+                                                        0),
+                                                    color:
+                                                        Colors.blueGrey[800]),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                  _buildRow(
-                                    context,
-                                    'Nominal @1 Poin:',
-                                    formatRupiah(nominalPoint),
-                                  ),
-                                  _buildRow(
-                                    context,
-                                    'Disc Poin:',
-                                    formatRupiah(discPoint),
-                                  ),
-                                  // Checkbox untuk kurangi discPoint dari total
-                                  Row(
-                                    children: [
-                                      Checkbox(
-                                        value:
-                                            kurangiDariPoint, // otomatis true/false dari state
-                                        onChanged: (value) {
-                                          setState(() {
-                                            kurangiDariPoint =
-                                                value ?? false; // update state
-                                            calculateTotals(); // recalc total
-                                          });
-                                        },
-                                      ),
-                                      const Text(
-                                        'Gunakan poin',
-                                        style: TextStyle(fontSize: 13),
-                                      ),
-                                      const Divider(thickness: 1),
-                                    ],
-                                  ),
-                                  const Divider(thickness: 1),
-                                ],
-
-                                _buildRow(context, 'Subtotal:',
-                                    formatRupiah(subtotal)),
-                                _buildRow(context, 'Diskon (-):',
-                                    formatRupiah(discount)),
-                                _buildRow(
-                                    context, 'Total:', formatRupiah(total)),
-
-// SERVICE
-                                _buildRow(
-                                  context,
-                                  'Service Charge $formattedSvc% (+):',
-                                  formatRupiah(isServiceEnabled ? svc1 : 0),
-                                  onDelete: () {
-                                    setState(() {
-                                      isServiceEnabled = false;
-                                      calculateTotals();
-                                    });
-                                  },
-                                ),
-                                // TAX (PB1)
-                                _buildRow(
-                                  context,
-                                  'PB1 $formattedTax% (+):',
-                                  formatRupiah(isTaxEnabled ? tax1 : 0),
-                                  onDelete: () {
-                                    setState(() {
-                                      isTaxEnabled = false;
-                                      calculateTotals();
-                                    });
-                                  },
                                 ),
 
-                                _buildRow(context, 'Rounding (+):',
-                                    formatRupiah(rounding)),
-
+                                const Divider(thickness: 1.5, height: 24),
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text(
-                                      'Grand Total:',
+                                      'Grand Total',
                                       style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                     Text(
                                       formatRupiah(grandtotal),
-                                      style: const TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color:
+                                              Theme.of(context).primaryColor),
                                     ),
                                   ],
                                 ),
-
-                                if (tempSales != null && skemaMember == 1) ...[
-                                  const Divider(thickness: 1),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    'Sales ID: ${tempSales!['sales_id']}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  Text(
-                                    'Agent: ${tempSales!['agent_id']}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  Text(
-                                    'PIC: ${tempSales!['agent_pic']}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  Text(
-                                    'Customer: ${tempSales!['name']}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Payment: ${tempSales!['paytype']}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  _buildRow(
-                                    context,
-                                    'DP:',
-                                    formatRupiah(double.tryParse(
-                                            tempSales!['dp'].toString()) ??
-                                        0),
-                                  ),
-                                ],
                               ],
                             ),
                           ),
-                        ),
+                        )
                       ],
                     );
                   } else {
@@ -2723,48 +2903,121 @@ class _CartItemScreenState extends State<CartItemScreen> {
                                                     ),
                                                   ),
                                                 ),
+                                                //split mobile
                                                 ValueListenableBuilder<bool>(
                                                   valueListenable:
                                                       GlobalState.isSplitMode,
                                                   builder: (context,
                                                       isSplitMode, _) {
                                                     if (!isSplitMode)
-                                                      return SizedBox();
+                                                      return const SizedBox();
 
-                                                    return Checkbox(
-                                                      value: item['isSplit'] ??
-                                                          false,
-                                                      onChanged: (val) {
-                                                        setState(() {
-                                                          item['isSplit'] =
-                                                              val ?? false;
+                                                    item['splitQty'] ??= 1;
+                                                    bool isSelected =
+                                                        item['isSplit'] ??
+                                                            false;
 
-                                                          final double price =
-                                                              item['price']
-                                                                      ?.toDouble() ??
-                                                                  0;
-                                                          final int qty = item[
-                                                                  'quantity'] ??
-                                                              1;
-                                                          final double
-                                                              itemTotal =
-                                                              price * qty;
+                                                    return AnimatedSize(
+                                                      duration: const Duration(
+                                                          milliseconds: 200),
+                                                      curve: Curves.easeInOut,
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize
+                                                            .min, // Mengikuti lebar konten
+                                                        children: [
+                                                          // Checkbox yang lebih rapat
+                                                          SizedBox(
+                                                            width:
+                                                                32, // Membatasi lebar checkbox agar tidak boros tempat
+                                                            child: Checkbox(
+                                                              value: isSelected,
+                                                              visualDensity:
+                                                                  VisualDensity
+                                                                      .compact,
+                                                              onChanged: (val) {
+                                                                setState(() {
+                                                                  item['isSplit'] =
+                                                                      val ??
+                                                                          false;
+                                                                  _handleSplitLogic(
+                                                                      item,
+                                                                      val ??
+                                                                          false);
+                                                                });
+                                                              },
+                                                            ),
+                                                          ),
 
-                                                          if (val == true) {
-                                                            splitItems
-                                                                .add(item);
-                                                            splitTotal +=
-                                                                itemTotal; // 🟢 Tambah total
-                                                          } else {
-                                                            splitItems
-                                                                .remove(item);
-                                                            splitTotal -=
-                                                                itemTotal; // 🔴 Kurangi total
-                                                            if (splitTotal < 0)
-                                                              splitTotal = 0;
-                                                          }
-                                                        });
-                                                      },
+                                                          // Hanya makan tempat kalau isSelected = true
+                                                          if (isSelected) ...[
+                                                            const SizedBox(
+                                                                width: 4),
+                                                            Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          4,
+                                                                      vertical:
+                                                                          2),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: Colors
+                                                                    .blueGrey[50],
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            6),
+                                                                border: Border.all(
+                                                                    color: Colors
+                                                                            .blueGrey[
+                                                                        100]!),
+                                                              ),
+                                                              child: Row(
+                                                                children: [
+                                                                  _qtyActionBtn(
+                                                                    icon: Icons
+                                                                        .remove,
+                                                                    onTap: () =>
+                                                                        _updateQty(
+                                                                            item,
+                                                                            -1),
+                                                                    enabled:
+                                                                        item['splitQty'] >
+                                                                            1,
+                                                                  ),
+                                                                  Padding(
+                                                                    padding: const EdgeInsets
+                                                                        .symmetric(
+                                                                        horizontal:
+                                                                            6),
+                                                                    child: Text(
+                                                                      "${item['splitQty']}/${item['quantity']}",
+                                                                      style: const TextStyle(
+                                                                          fontSize:
+                                                                              12,
+                                                                          fontWeight:
+                                                                              FontWeight.w600),
+                                                                    ),
+                                                                  ),
+                                                                  _qtyActionBtn(
+                                                                    icon: Icons
+                                                                        .add,
+                                                                    onTap: () =>
+                                                                        _updateQty(
+                                                                            item,
+                                                                            1),
+                                                                    enabled: item[
+                                                                            'splitQty'] <
+                                                                        item[
+                                                                            'quantity'],
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ],
+                                                      ),
                                                     );
                                                   },
                                                 ),
@@ -3017,221 +3270,273 @@ class _CartItemScreenState extends State<CartItemScreen> {
                           ),
                         ),
 
-                        // Detail checkout tetap di bawah
+                        // Detail checkout mobile tetap di bawah
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            boxShadow: const [
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
                               BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                                offset: Offset(0, 2),
+                                color: Colors.black.withOpacity(0.05),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
                               ),
                             ],
                           ),
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Tombol search voucher
-                                  IconButton(
-                                    icon: Icon(Icons.search,
-                                        color: Theme.of(context).primaryColor),
-                                    onPressed: () async {
-                                      await fetchVoucher(); // ambil dari API
-                                      await showVoucherDialog(); // tampilkan popup
-                                    },
-                                  ),
-                                  const SizedBox(width: 4),
+                              // SECTION 1: HEADER (STATIS / TIDAK SCROLL)
 
-                                  // TextField voucher
+                              Row(
+                                children: [
+                                  // Tombol Search Voucher
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context)
+                                          .primaryColor
+                                          .withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: IconButton(
+                                      icon: Icon(
+                                          Icons.confirmation_number_outlined,
+                                          color:
+                                              Theme.of(context).primaryColor),
+                                      onPressed: () async {
+                                        await fetchVoucher();
+                                        await showVoucherDialog();
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // TextField Voucher
                                   Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: TextField(
-                                        controller: _voucherController,
-                                        readOnly:
-                                            true, // user tidak bisa mengetik
-                                        style: const TextStyle(fontSize: 13),
-                                        decoration: const InputDecoration(
-                                          hintText:
-                                              'Voucher code klik icon cari',
-                                          isDense: true,
-                                          contentPadding: EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 10),
-                                          border: OutlineInputBorder(),
+                                    child: TextField(
+                                      controller: _voucherController,
+                                      readOnly: true,
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold),
+                                      decoration: InputDecoration(
+                                        hintText: 'Pilih Voucher',
+                                        isDense: true,
+                                        filled: true,
+                                        fillColor: Colors.grey[50],
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey[300]!),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          borderSide: BorderSide(
+                                              color: Colors.grey[200]!),
                                         ),
                                       ),
                                     ),
                                   ),
-                                  //mobile cart info
                                   const SizedBox(width: 8),
-
-                                  // Tombol gunakan voucher
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete,
-                                      color: Colors.red,
-                                      size: 24,
-                                    ),
-                                    tooltip: 'Hapus Voucher',
-                                    onPressed: () async {
-                                      try {
+                                  // Tombol Hapus Voucher
+                                  if (_voucherController.text.isNotEmpty)
+                                    IconButton(
+                                      icon: const Icon(Icons.cancel,
+                                          color: Colors.redAccent),
+                                      onPressed: () async {
                                         _voucherController.clear();
                                         voucherCode = "";
-
-                                        await getDiscount(); // backend reset diskon
-
+                                        await getDiscount();
                                         setState(() {});
-                                      } catch (e) {
-                                        print(e);
-                                      }
-                                    },
+                                      },
+                                    ),
+                                  // TOMBOL EXPAND/COLLAPSE (Sticky di atas)
+                                  IconButton(
+                                    icon: Icon(
+                                      isExpanded
+                                          ? Icons.keyboard_arrow_up
+                                          : Icons.keyboard_arrow_down,
+                                      color: Colors.grey[600],
+                                    ),
+                                    onPressed: () => setState(
+                                        () => isExpanded = !isExpanded),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 10),
-                              if (skemaMember == 1 && isMember) ...[
-                                _buildRow(
-                                  context,
-                                  'Poin:',
-                                  null,
-                                  valueWidget: Text(
-                                    '${point.toInt()} pts',
-                                    style: const TextStyle(
-                                      color: Colors.green,
-                                      fontWeight: FontWeight.bold,
+
+                              Flexible(
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxHeight:
+                                        MediaQuery.of(context).size.height *
+                                            0.5, // Batas tinggi scroll
+                                  ),
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      children: [
+                                        const SizedBox(height: 16),
+                                        _buildRow(context, 'Subtotal',
+                                            formatRupiah(subtotal)),
+                                        _buildRow(context, 'Diskon (-)',
+                                            formatRupiah(discount),
+                                            color: Colors.red),
+                                        _buildRow(context, 'Total:',
+                                            formatRupiah(total)),
+                                        AnimatedSize(
+                                          duration:
+                                              const Duration(milliseconds: 300),
+                                          child: Column(
+                                            children: [
+                                              if (isExpanded) ...[
+                                                const Divider(height: 24),
+                                                _buildRow(
+                                                    context,
+                                                    'Service Charge $formattedSvc%',
+                                                    formatRupiah(
+                                                        isServiceEnabled
+                                                            ? svc1
+                                                            : 0)),
+                                                _buildRow(
+                                                    context,
+                                                    'PB1 $formattedTax%',
+                                                    formatRupiah(isTaxEnabled
+                                                        ? tax1
+                                                        : 0)),
+                                                _buildRow(context, 'Rounding',
+                                                    formatRupiah(rounding)),
+                                                if (skemaMember == 1 &&
+                                                    isMember) ...[
+                                                  const Divider(thickness: 1),
+                                                  _buildRow(
+                                                      context, 'Poin:', null,
+                                                      valueWidget: Text(
+                                                          '${point.toInt()} pts',
+                                                          style: const TextStyle(
+                                                              color:
+                                                                  Colors.green,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold))),
+                                                  _buildRow(
+                                                      context,
+                                                      'Nominal @1 Poin:',
+                                                      formatRupiah(
+                                                          nominalPoint)),
+                                                  _buildRow(
+                                                      context,
+                                                      'Disc Poin:',
+                                                      formatRupiah(discPoint)),
+                                                  Row(
+                                                    children: [
+                                                      Checkbox(
+                                                        value: kurangiDariPoint,
+                                                        onChanged: (value) {
+                                                          setState(() {
+                                                            kurangiDariPoint =
+                                                                value ?? false;
+                                                            calculateTotals();
+                                                          });
+                                                        },
+                                                      ),
+                                                      const Text('Gunakan poin',
+                                                          style: TextStyle(
+                                                              fontSize: 13)),
+                                                    ],
+                                                  ),
+                                                ],
+                                                if (tempSales != null &&
+                                                    skemaMember == 1) ...[
+                                                  const Divider(
+                                                      thickness: 1, height: 20),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.all(
+                                                            10),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[50],
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                      border: Border.all(
+                                                          color: Colors
+                                                              .grey[200]!),
+                                                    ),
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        _buildInfoText(
+                                                            'Sales ID',
+                                                            tempSales![
+                                                                'sales_id']),
+                                                        _buildInfoText(
+                                                            'Agent',
+                                                            tempSales![
+                                                                'agent_id']),
+                                                        _buildInfoText(
+                                                            'PIC',
+                                                            tempSales![
+                                                                'agent_pic']),
+                                                        _buildInfoText(
+                                                            'Customer',
+                                                            tempSales!['name']),
+                                                        _buildInfoText(
+                                                            'Payment',
+                                                            tempSales![
+                                                                'paytype']),
+                                                        const Divider(
+                                                            height: 15),
+                                                        _buildRow(
+                                                            context,
+                                                            'DP:',
+                                                            formatRupiah(double.tryParse(
+                                                                    tempSales![
+                                                                            'dp']
+                                                                        .toString()) ??
+                                                                0),
+                                                            color: Colors
+                                                                .blueGrey[800]),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                _buildRow(
-                                  context,
-                                  'Nominal @1 Poin:',
-                                  formatRupiah(nominalPoint),
-                                ),
-                                _buildRow(
-                                  context,
-                                  'Disc Poin:',
-                                  formatRupiah(discPoint),
-                                ),
-                                // Checkbox untuk kurangi discPoint dari total
-                                Row(
-                                  children: [
-                                    Checkbox(
-                                      value:
-                                          kurangiDariPoint, // otomatis true/false dari state
-                                      onChanged: (value) {
-                                        setState(() {
-                                          kurangiDariPoint =
-                                              value ?? false; // update state
-                                          calculateTotals(); // recalc total
-                                        });
-                                      },
-                                    ),
-                                    const Text(
-                                      'Gunakan poin',
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                    const Divider(thickness: 1),
-                                  ],
-                                ),
-                                const Divider(thickness: 1),
-                              ],
-
-                              _buildRow(
-                                  context, 'Subtotal:', formatRupiah(subtotal)),
-                              _buildRow(context, 'Diskon (-):',
-                                  formatRupiah(discount)),
-                              _buildRow(context, 'Total:', formatRupiah(total)),
-
-// SERVICE
-                              _buildRow(
-                                context,
-                                'Service Charge $formattedSvc% (+):',
-                                formatRupiah(isServiceEnabled ? svc1 : 0),
-                                onDelete: () {
-                                  setState(() {
-                                    isServiceEnabled = false;
-                                    calculateTotals();
-                                  });
-                                },
                               ),
 
-// TAX (PB1)
-                              _buildRow(
-                                context,
-                                'PB1 $formattedTax% (+):',
-                                formatRupiah(isTaxEnabled ? tax1 : 0),
-                                onDelete: () {
-                                  setState(() {
-                                    isTaxEnabled = false;
-                                    calculateTotals();
-                                  });
-                                },
-                              ),
-
-                              _buildRow(context, 'Rounding (+):',
-                                  formatRupiah(rounding)),
-
+                              const Divider(height: 24, thickness: 1.5),
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text(
-                                    'Grand Total:',
+                                    'Grand Total',
                                     style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold),
                                   ),
                                   Text(
                                     formatRupiah(grandtotal),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(context).primaryColor),
                                   ),
                                 ],
                               ),
-                              if (tempSales != null && skemaMember == 1) ...[
-                                const Divider(thickness: 1),
-                                const SizedBox(height: 5),
-                                Text(
-                                  'Sales ID: ${tempSales!['sales_id']}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                Text(
-                                  'Agent ID: ${tempSales!['agent_id']}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                Text(
-                                  'PIC: ${tempSales!['agent_pic']}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                Text(
-                                  'Customer: ${tempSales!['name']}',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                Text(
-                                  'Payment: ${tempSales!['paytype']}',
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                                _buildRow(
-                                  context,
-                                  'DP:',
-                                  formatRupiah(double.tryParse(
-                                          tempSales!['dp'].toString()) ??
-                                      0),
-                                ),
-                              ],
                             ],
                           ),
                         ),

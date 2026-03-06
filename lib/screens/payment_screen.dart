@@ -116,11 +116,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
   double get paid => payments.fold(0.0, (p, c) => p + (c["amount"] ?? 0.0));
   double get remaining => totalAmount - paid;
   bool isRegisterMember = false;
+  int skemaMember = 0;
 
   @override
   void initState() {
     super.initState();
     Wakelock.enable();
+    setState(() {
+      isRegisterMember = false;
+    });
+    loadSkemaMember();
     _loadCustomerData();
     totalAmount = widget.grandtotal;
 
@@ -148,6 +153,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  Future<void> loadSkemaMember() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      skemaMember = prefs.getInt('skema') ?? 0;
+    });
+    //debugPrint(skemaMember.toString());
+  }
+
   Future<void> _loadCustomerData() async {
     final prefs = await SharedPreferences.getInstance();
     final phone = prefs.getString('user_phone');
@@ -155,6 +169,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     if (phone != null) waNumberController.text = phone;
     if (name != null) namaController.text = name;
+    await prefs.remove('is_register_member');
     bool savedMemberStatus = prefs.getBool('is_register_member') ?? false;
     setState(() {
       if (phone != null) waNumberController.text = phone;
@@ -2559,47 +2574,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
                                     ? namaController.text.toUpperCase()
                                     : "-"),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: ValueListenableBuilder<TextEditingValue>(
-                              valueListenable: waNumberController,
-                              builder: (context, value, child) {
-                                bool isValid = value.text.length >= 9;
-                                return Container(
-                                  height: 55,
-                                  margin: const EdgeInsets.only(bottom: 4),
-                                  child: Center(
-                                    // Menjaga Switch tetap di tengah secara vertikal
-                                    child: SwitchListTile(
-                                      contentPadding: const EdgeInsets.only(
-                                          left: 12, right: 4),
-                                      title: Text(
-                                        "Aktifkan untuk menjadi member.",
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: isValid
-                                              ? Colors.green[800]
-                                              : Colors.grey,
+                          if (skemaMember == 0) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: waNumberController,
+                                builder: (context, value, child) {
+                                  bool isValid = value.text.length >= 9;
+                                  return Container(
+                                    height: 55,
+                                    margin: const EdgeInsets.only(bottom: 4),
+                                    child: Center(
+                                      // Menjaga Switch tetap di tengah secara vertikal
+                                      child: SwitchListTile(
+                                        contentPadding: const EdgeInsets.only(
+                                            left: 12, right: 4),
+                                        title: Text(
+                                          "Aktifkan untuk menjadi member.",
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: isValid
+                                                ? Colors.green[800]
+                                                : Colors.grey,
+                                          ),
                                         ),
+                                        value:
+                                            isValid ? isRegisterMember : false,
+                                        activeColor: Colors.green,
+                                        onChanged: isValid
+                                            ? (bool newValue) {
+                                                setState(() {
+                                                  isRegisterMember = newValue;
+                                                });
+                                                _saveMemberStatus(
+                                                    newValue, value.text);
+                                              }
+                                            : null,
                                       ),
-                                      value: isValid ? isRegisterMember : false,
-                                      activeColor: Colors.green,
-                                      onChanged: isValid
-                                          ? (bool newValue) {
-                                              setState(() {
-                                                isRegisterMember = newValue;
-                                              });
-                                              _saveMemberStatus(
-                                                  newValue, value.text);
-                                            }
-                                          : null,
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
-                          ),
+                          ]
                         ],
                       ),
                     ],
@@ -2719,47 +2737,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ? namaController.text.toUpperCase()
                               : "-"),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: waNumberController,
-                        builder: (context, value, child) {
-                          bool isValid = value.text.length >= 9;
-                          return Container(
-                            height: 55,
-                            margin: const EdgeInsets.only(bottom: 4),
-                            child: Center(
-                              // Menjaga Switch tetap di tengah secara vertikal
-                              child: SwitchListTile(
-                                contentPadding:
-                                    const EdgeInsets.only(left: 12, right: 4),
-                                title: Text(
-                                  "Aktifkan untuk menjadi member.",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: isValid
-                                        ? Colors.green[800]
-                                        : Colors.grey,
+                    if (skemaMember == 0) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: waNumberController,
+                          builder: (context, value, child) {
+                            bool isValid = value.text.length >= 9;
+                            return Container(
+                              height: 55,
+                              margin: const EdgeInsets.only(bottom: 4),
+                              child: Center(
+                                // Menjaga Switch tetap di tengah secara vertikal
+                                child: SwitchListTile(
+                                  contentPadding:
+                                      const EdgeInsets.only(left: 12, right: 4),
+                                  title: Text(
+                                    "Aktifkan untuk menjadi member.",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isValid
+                                          ? Colors.green[800]
+                                          : Colors.grey,
+                                    ),
                                   ),
+                                  value: isValid ? isRegisterMember : false,
+                                  activeColor: Colors.green,
+                                  onChanged: isValid
+                                      ? (bool newValue) {
+                                          setState(() {
+                                            isRegisterMember = newValue;
+                                          });
+                                          // Memanggil fungsi hapus/simpan di atas
+                                          _saveMemberStatus(
+                                              newValue, value.text);
+                                        }
+                                      : null,
                                 ),
-                                value: isValid ? isRegisterMember : false,
-                                activeColor: Colors.green,
-                                onChanged: isValid
-                                    ? (bool newValue) {
-                                        setState(() {
-                                          isRegisterMember = newValue;
-                                        });
-                                        // Memanggil fungsi hapus/simpan di atas
-                                        _saveMemberStatus(newValue, value.text);
-                                      }
-                                    : null,
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ]
@@ -2882,47 +2903,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               ? namaController.text.toUpperCase()
                               : "-"),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      flex: 2,
-                      child: ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: waNumberController,
-                        builder: (context, value, child) {
-                          bool isValid = value.text.length >= 9;
-                          return Container(
-                            height: 55,
-                            margin: const EdgeInsets.only(bottom: 4),
-                            child: Center(
-                              // Menjaga Switch tetap di tengah secara vertikal
-                              child: SwitchListTile(
-                                contentPadding:
-                                    const EdgeInsets.only(left: 12, right: 4),
-                                title: Text(
-                                  "Aktifkan untuk menjadi member.",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: isValid
-                                        ? Colors.green[800]
-                                        : Colors.grey,
+                    if (skemaMember == 0) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: ValueListenableBuilder<TextEditingValue>(
+                          valueListenable: waNumberController,
+                          builder: (context, value, child) {
+                            bool isValid = value.text.length >= 9;
+                            return Container(
+                              height: 55,
+                              margin: const EdgeInsets.only(bottom: 4),
+                              child: Center(
+                                // Menjaga Switch tetap di tengah secara vertikal
+                                child: SwitchListTile(
+                                  contentPadding:
+                                      const EdgeInsets.only(left: 12, right: 4),
+                                  title: Text(
+                                    "Aktifkan untuk menjadi member.",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isValid
+                                          ? Colors.green[800]
+                                          : Colors.grey,
+                                    ),
                                   ),
+                                  value: isValid ? isRegisterMember : false,
+                                  activeColor: Colors.green,
+                                  onChanged: isValid
+                                      ? (bool newValue) {
+                                          setState(() {
+                                            isRegisterMember = newValue;
+                                          });
+                                          // Memanggil fungsi hapus/simpan di atas
+                                          _saveMemberStatus(
+                                              newValue, value.text);
+                                        }
+                                      : null,
                                 ),
-                                value: isValid ? isRegisterMember : false,
-                                activeColor: Colors.green,
-                                onChanged: isValid
-                                    ? (bool newValue) {
-                                        setState(() {
-                                          isRegisterMember = newValue;
-                                        });
-                                        // Memanggil fungsi hapus/simpan di atas
-                                        _saveMemberStatus(newValue, value.text);
-                                      }
-                                    : null,
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ]
